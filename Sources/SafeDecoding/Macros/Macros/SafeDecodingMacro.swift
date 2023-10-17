@@ -48,8 +48,6 @@ extension SafeDecodingMacro: ExtensionMacro {
 
         let notComputedNonInitializedTypeProperties = typeProperties.filter { !$0.0.isComputed && !$0.0.isInitialized }
 
-        var dumpedConformances = ""
-        dump(protocols, to: &dumpedConformances)
         let initializer = try InitializerDeclSyntax("public init(from decoder: Decoder) throws") {
             if !notComputedNonInitializedTypeProperties.isEmpty {
                 CodeBlockItemSyntax(
@@ -58,16 +56,6 @@ extension SafeDecodingMacro: ExtensionMacro {
                 """
                 )
             }
-
-//            CodeBlockItemSyntax(
-//                """
-//                print(
-//                    \"\"\"
-//                        \(raw: dumpedConformances)
-//                    \"\"\"
-//                )
-//                """
-//            )
 
             for (property, shouldIgnoreProperty) in notComputedNonInitializedTypeProperties {
                 if
