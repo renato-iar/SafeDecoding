@@ -13,6 +13,9 @@ let testMacros: [String: Macro.Type] = [
 #endif
 
 final class SafeDecodingTests: XCTestCase {
+}
+
+extension SafeDecodingTests {
     func testSafeDecodingOfOptional() throws {
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
@@ -51,7 +54,7 @@ final class SafeDecodingTests: XCTestCase {
     }
 
     func testSafeDecodingOfSet() throws {
-        #if canImport(SafeDecodingMacros)
+#if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
                 @SafeDecoding
@@ -59,7 +62,7 @@ final class SafeDecodingTests: XCTestCase {
                     let set: Set<Int>
                 }
                 """,
-            expandedSource:
+                expandedSource:
                 """
 
                 struct Model {
@@ -80,11 +83,11 @@ final class SafeDecodingTests: XCTestCase {
                     }
                 }
                 """,
-            macros: testMacros
+                macros: testMacros
         )
-        #else
+#else
         throw XCTSkip("macros are only supported when running tests for the host platform")
-        #endif
+#endif
     }
 
     func testSafeDecodingOfArray() throws {
@@ -169,12 +172,251 @@ final class SafeDecodingTests: XCTestCase {
 #endif
 
     }
+}
 
+extension SafeDecodingTests {
+    func testSafeDecodingOfOptionalWithReporter() throws {
+#if canImport(SafeDecodingMacros)
+        assertMacroExpansion(
+                """
+                @SafeDecoding(reporter: reporter)
+                struct Model {
+                    let optional: Int?
+                    let optionalGeneric: Optional<Int>
+                }
+                """,
+                expandedSource:
+                """
+
+                struct Model {
+                    let optional: Int?
+                    let optionalGeneric: Optional<Int>
+                }
+
+                extension Model {
+                    private enum CodingKeys: CodingKey {
+                        case optional
+                        case optionalGeneric
+                    }
+                    public init(from decoder: Decoder) throws {
+                        let container = try decoder.container(keyedBy: CodingKeys.self)
+                        do {
+                            self.optional = try container.decode((Int).self, forKey: .optional)
+                        } catch {
+                            self.optional = nil
+                            reporter.report(error: error, of: "optional", decoding: (Optional<Int>).self, in: (Model).self)
+                        }
+                        do {
+                            self.optionalGeneric = try container.decode((Int).self, forKey: .optionalGeneric)
+                        } catch {
+                            self.optionalGeneric = nil
+                            reporter.report(error: error, of: "optionalGeneric", decoding: (Optional<Int>).self, in: (Model).self)
+                        }
+                    }
+                }
+                """,
+                macros: testMacros
+        )
+#else
+        throw XCTSkip("macros are only supported when running tests for the host platform")
+#endif
+    }
+
+    func testSafeDecodingOfSetWithReporter() throws {
+#if canImport(SafeDecodingMacros)
+        assertMacroExpansion(
+                """
+                @SafeDecoding(reporter: reporter)
+                struct Model {
+                    let set: Set<Int>
+                }
+                """,
+                expandedSource:
+                """
+
+                struct Model {
+                    let set: Set<Int>
+                }
+
+                extension Model {
+                    private enum CodingKeys: CodingKey {
+                        case set
+                    }
+                    public init(from decoder: Decoder) throws {
+                        let container = try decoder.container(keyedBy: CodingKeys.self)
+                        do {
+                            let decodedItems = try container.decode((Array<SafeDecodable<Int>>).self, forKey: .set)
+                            var items: Set<Int> = []
+
+                            for item in decodedItems {
+                                if let decoded = item.decoded {
+                                    items.insert(decoded)
+                                } else if let error = item.error {
+                                    reporter.report(error: error, decoding: (Int).self, of: "set", in: (Model).self)
+                                }
+                            }
+
+                            self.set = items
+                        } catch {
+                            self.set = []
+                            reporter.report(error: error, of: "set", decoding: Set<Int> .self, in: (Model).self)
+                        }
+                    }
+                }
+                """,
+                macros: testMacros
+        )
+#else
+        throw XCTSkip("macros are only supported when running tests for the host platform")
+#endif
+    }
+
+    func testSafeDecodingOfArrayWithReporter() throws {
+#if canImport(SafeDecodingMacros)
+        assertMacroExpansion(
+                """
+                @SafeDecoding(reporter: reporter)
+                struct Model {
+                    let array: [Int]
+                    let arrayGeneric: Array<Int>
+                }
+                """,
+                expandedSource:
+                """
+
+                struct Model {
+                    let array: [Int]
+                    let arrayGeneric: Array<Int>
+                }
+
+                extension Model {
+                    private enum CodingKeys: CodingKey {
+                        case array
+                        case arrayGeneric
+                    }
+                    public init(from decoder: Decoder) throws {
+                        let container = try decoder.container(keyedBy: CodingKeys.self)
+                        do {
+                            let decodedArray = try container.decode((Array<SafeDecodable<Int>>).self, forKey: .array)
+                            var items: [Int] = []
+
+                            for (index, item) in decodedArray.enumerated() {
+                                if let decoded = item.decoded {
+                                    items.append(decoded)
+                                } else if let error = item.error {
+                                    reporter.report(error: error, decoding: (Int).self, at: index, of: "array", in: (Model).self)
+                                }
+                            }
+
+                            self.array = items
+                        } catch {
+                            self.array = []
+                            reporter.report(error: error, of: "array", decoding: Array<Int> .self, in: (Model).self)
+                        }
+                        do {
+                            let decodedArray = try container.decode((Array<SafeDecodable<Int>>).self, forKey: .arrayGeneric)
+                            var items: [Int] = []
+
+                            for (index, item) in decodedArray.enumerated() {
+                                if let decoded = item.decoded {
+                                    items.append(decoded)
+                                } else if let error = item.error {
+                                    reporter.report(error: error, decoding: (Int).self, at: index, of: "arrayGeneric", in: (Model).self)
+                                }
+                            }
+
+                            self.arrayGeneric = items
+                        } catch {
+                            self.arrayGeneric = []
+                            reporter.report(error: error, of: "arrayGeneric", decoding: Array<Int> .self, in: (Model).self)
+                        }
+                    }
+                }
+                """,
+                macros: testMacros
+        )
+#else
+        throw XCTSkip("macros are only supported when running tests for the host platform")
+#endif
+    }
+
+    func testSafeDecodingOfDictionaryWithReporter() throws {
+#if canImport(SafeDecodingMacros)
+        assertMacroExpansion(
+                """
+                @SafeDecoding(reporter: reporter)
+                struct Model {
+                    let dictionary: [Int: Int]
+                    let dictionaryGeneric: Dictionary<Int, Int>
+                }
+                """,
+                expandedSource:
+                """
+
+                struct Model {
+                    let dictionary: [Int: Int]
+                    let dictionaryGeneric: Dictionary<Int, Int>
+                }
+
+                extension Model {
+                    private enum CodingKeys: CodingKey {
+                        case dictionary
+                        case dictionaryGeneric
+                    }
+                    public init(from decoder: Decoder) throws {
+                        let container = try decoder.container(keyedBy: CodingKeys.self)
+                        do {
+                            let decodedItems = try container.decode((Dictionary<Int, SafeDecodable<Int>>).self, forKey: .dictionary)
+                            var items: Dictionary<Int, Int> = [:]
+
+                            for (key, value) in decodedItems {
+                                if let decoded = value.decoded {
+                                    items[key] = decoded
+                                } else if let error = value.error {
+                                    reporter.report(error: error, decoding: (Int).self, forKey: key, of: "dictionary", in: (Model).self)
+                                }
+                            }
+
+                            self.dictionary = items
+                        } catch {
+                            self.dictionary = [:]
+                            reporter.report(error: error, of: "dictionary", decoding: (Dictionary<Int, SafeDecodable<Int>>).self, in: (Model).self)
+                        }
+                        do {
+                            let decodedItems = try container.decode((Dictionary<Int, SafeDecodable<Int>>).self, forKey: .dictionaryGeneric)
+                            var items: Dictionary<Int, Int> = [:]
+
+                            for (key, value) in decodedItems {
+                                if let decoded = value.decoded {
+                                    items[key] = decoded
+                                } else if let error = value.error {
+                                    reporter.report(error: error, decoding: (Int).self, forKey: key, of: "dictionaryGeneric", in: (Model).self)
+                                }
+                            }
+
+                            self.dictionaryGeneric = items
+                        } catch {
+                            self.dictionaryGeneric = [:]
+                            reporter.report(error: error, of: "dictionaryGeneric", decoding: (Dictionary<Int, SafeDecodable<Int>>).self, in: (Model).self)
+                        }
+                    }
+                }
+                """,
+                macros: testMacros
+        )
+#else
+        throw XCTSkip("macros are only supported when running tests for the host platform")
+#endif
+
+    }
+}
+
+extension SafeDecodingTests {
     func testSafeDecodingIgnoresComputedProperty() throws {
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
-                @SafeDecoding
+                @SafeDecoding(reporter: SafeDecodingErrorReporter.shared)
                 struct Model {
                     let computed: Int { 0 }
                 }
@@ -234,7 +476,9 @@ final class SafeDecodingTests: XCTestCase {
 
 
     }
+}
 
+extension SafeDecodingTests {
     func testMacro() throws {
         #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
