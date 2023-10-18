@@ -1,3 +1,5 @@
+import Foundation
+
 @attached(
     extension,
     conformances: Decodable,
@@ -7,7 +9,7 @@
         named(Decodable),
         named(init(from:))
 )
-public macro SafeDecoding() = #externalMacro(
+public macro SafeDecoding(reporter: SafeDecodingReporter? = nil) = #externalMacro(
     module: "SafeDecodingMacros",
     type: "SafeDecodingMacro"
 )
