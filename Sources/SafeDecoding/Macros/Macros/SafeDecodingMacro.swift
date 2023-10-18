@@ -47,9 +47,8 @@ extension SafeDecodingMacro: ExtensionMacro {
             }
 
         let notComputedNonInitializedTypeProperties = typeProperties.filter { !$0.0.isComputed && !$0.0.isInitialized }
+        let reporter = node.as(AttributeSyntax.self)?.arguments?.as(LabeledExprListSyntax.self)?.first?.expression
 
-        var dumpedConformances = ""
-        dump(protocols, to: &dumpedConformances)
         let initializer = try InitializerDeclSyntax("public init(from decoder: Decoder) throws") {
             if !notComputedNonInitializedTypeProperties.isEmpty {
                 CodeBlockItemSyntax(
@@ -59,52 +58,50 @@ extension SafeDecodingMacro: ExtensionMacro {
                 )
             }
 
-//            CodeBlockItemSyntax(
-//                """
-//                print(
-//                    \"\"\"
-//                        \(raw: dumpedConformances)
-//                    \"\"\"
-//                )
-//                """
-//            )
-
             for (property, shouldIgnoreProperty) in notComputedNonInitializedTypeProperties {
                 if
                     let pattern = property.pattern.as(IdentifierPatternSyntax.self),
-                    let type = property.typeAnnotation?.type
+                    let propertyType = property.typeAnnotation?.type
                 {
                     if shouldIgnoreProperty {
                         standardDecoderSyntax(
                             for: pattern,
-                            of: type
+                            of: propertyType
                         )
                     }
-                    else if let optionalElementType = extractOptionalType(from: type) {
+                    else if let optionalElementType = extractOptionalType(from: propertyType) {
                         optionalDecoderSyntax(
                             for: pattern,
-                            elementType: optionalElementType
+                            elementType: optionalElementType,
+                            reporter: reporter,
+                            container: type
                         )
-                    } else if let arrayElementType = extractArrayType(from: type) {
+                    } else if let arrayElementType = extractArrayType(from: propertyType) {
                         arrayDecoderSyntax(
                             for: pattern,
-                            elementType: arrayElementType
+                            elementType: arrayElementType,
+                            reporter: reporter,
+                            container: type
                         )
-                    } else if let setElementType = extractSetType(from: type) {
+                    } else if let setElementType = extractSetType(from: propertyType) {
                         setDecoderSyntax(
                             for: pattern,
-                            elementType: setElementType
+                            elementType: setElementType,
+                            reporter: reporter,
+                            container: type
                         )
-                    } else if let (keyType, valueType) = extractDictionayTypes(from: type) {
+                    } else if let (keyType, valueType) = extractDictionayTypes(from: propertyType) {
                         dictionaryDecoderSyntax(
                             for: pattern,
                             keyType: keyType,
-                            valueType: valueType
+                            valueType: valueType,
+                            reporter: reporter,
+                            container: type
                         )
                     } else {
                         standardDecoderSyntax(
                             for: pattern,
-                            of: type
+                            of: propertyType
                         )
                     }
                 }
@@ -200,13 +197,24 @@ private extension SafeDecodingMacro {
 
     static func optionalDecoderSyntax(
         for pattern: IdentifierPatternSyntax,
-        elementType: IdentifierTypeSyntax
+        elementType: IdentifierTypeSyntax,
+        reporter: ExprSyntax?,
+        container: TypeSyntaxProtocol
     ) -> CodeBlockItemSyntax {
-        return CodeBlockItemSyntax(
-                    """
-                    self.\(pattern.identifier) = try? container.decode((Optional<\(elementType)>).self, forKey: .\(pattern.identifier))
-                    """
-        )
+        return if let reporter {
+            """
+            do {
+                self.\(pattern.identifier) = try container.decode((\(elementType)).self, forKey: .\(pattern.identifier))
+            } catch {
+                self.\(pattern.identifier) = nil
+                \(reporter).report(error: error, of: "\(raw: pattern.identifier.description)", decoding: (Optional<\(elementType)>).self, in: (\(container)).self)
+            }
+            """
+        } else {
+            """
+            self.\(pattern.identifier) = try? container.decode((Optional<\(elementType)>).self, forKey: .\(pattern.identifier))
+            """
+        }
     }
 }
 
@@ -226,13 +234,35 @@ private extension SafeDecodingMacro {
 
     static func arrayDecoderSyntax(
         for pattern: IdentifierPatternSyntax,
-        elementType: IdentifierTypeSyntax
+        elementType: IdentifierTypeSyntax,
+        reporter: ExprSyntax?,
+        container: TypeSyntaxProtocol
     ) -> CodeBlockItemSyntax {
-        return CodeBlockItemSyntax(
-                    """
-                    self.\(pattern.identifier) = ((try? container.decode((Array<SafeDecodable<\(elementType)>>).self, forKey: .\(pattern.identifier))) ?? []).compactMap { $0.decoded }
-                    """
-        )
+        return if let reporter {
+            """
+            do {
+                let decodedArray = try container.decode((Array<SafeDecodable<\(elementType)>>).self, forKey: .\(pattern.identifier))
+                var items: [\(elementType)] = []
+
+                for (index, item) in decodedArray.enumerated() {
+                    if let decoded = item.decoded {
+                        items.append(decoded)
+                    } else if let error = item.error {
+                        \(reporter).report(error: error, decoding: (\(elementType)).self, at: index, of: "\(raw: pattern.identifier.description)", in: (\(container)).self)
+                    }
+                }
+
+                self.\(pattern.identifier) = items
+            } catch {
+                self.\(pattern.identifier) = []
+                \(reporter).report(error: error, of: "\(raw: pattern.identifier.description)", decoding: Array<\(elementType)>.self, in: (\(container)).self)
+            }
+            """
+        } else {
+            """
+            self.\(pattern.identifier) = ((try? container.decode((Array<SafeDecodable<\(elementType)>>).self, forKey: .\(pattern.identifier))) ?? []).compactMap { $0.decoded }
+            """
+        }
     }
 }
 
@@ -248,13 +278,35 @@ private extension SafeDecodingMacro {
 
     static func setDecoderSyntax(
         for pattern: IdentifierPatternSyntax,
-        elementType: IdentifierTypeSyntax
+        elementType: IdentifierTypeSyntax,
+        reporter: ExprSyntax?,
+        container: TypeSyntaxProtocol
     ) -> CodeBlockItemSyntax {
-        return CodeBlockItemSyntax(
-                    """
-                    self.\(pattern.identifier) = ((try? container.decode((Array<SafeDecodable<\(elementType)>>).self, forKey: .\(pattern.identifier))) ?? []).reduce(into: Set<\(elementType)>()) { set, safe in _ = safe.decoded.flatMap { value in set.insert(value) } }
-                    """
-        )
+        return if let reporter {
+            """
+            do {
+                let decodedItems = try container.decode((Array<SafeDecodable<\(elementType)>>).self, forKey: .\(pattern.identifier))
+                var items: Set<\(elementType)> = []
+
+                for item in decodedItems {
+                    if let decoded = item.decoded {
+                        items.insert(decoded)
+                    } else if let error = item.error {
+                        \(reporter).report(error: error, decoding: (\(elementType)).self, of: "\(raw: pattern.identifier.description)", in: (\(container)).self)
+                    }
+                }
+
+                self.\(pattern.identifier) = items
+            } catch {
+                self.\(pattern.identifier) = []
+                \(reporter).report(error: error, of: "\(raw: pattern.identifier.description)", decoding: Set<\(elementType)>.self, in: (\(container)).self)
+            }
+            """
+        } else {
+            """
+            self.\(pattern.identifier) = ((try? container.decode((Array<SafeDecodable<\(elementType)>>).self, forKey: .\(pattern.identifier))) ?? []).reduce(into: Set<\(elementType)>()) { set, safe in _ = safe.decoded.flatMap { value in set.insert(value) } }
+            """
+        }
     }
 }
 
@@ -286,13 +338,35 @@ private extension SafeDecodingMacro {
     static func dictionaryDecoderSyntax(
         for pattern: IdentifierPatternSyntax,
         keyType: IdentifierTypeSyntax,
-        valueType: IdentifierTypeSyntax
+        valueType: IdentifierTypeSyntax,
+        reporter: ExprSyntax?,
+        container: TypeSyntaxProtocol
     ) -> CodeBlockItemSyntax {
-        return CodeBlockItemSyntax(
-                    """
-                    self.\(pattern.identifier) = ((try? container.decode((Dictionary<\(keyType), SafeDecodable<\(valueType)>>).self, forKey: .\(pattern.identifier))) ?? [:]).reduce(into: [:]) { $0[$1.key] = $1.value.decoded }
-                    """
-        )
+        return if let reporter {
+            """
+            do {
+                let decodedItems = try container.decode((Dictionary<\(keyType), SafeDecodable<\(valueType)>>).self, forKey: .\(pattern.identifier))
+                var items: Dictionary<\(keyType), \(valueType)> = [:]
+
+                for (key, value) in decodedItems {
+                    if let decoded = value.decoded {
+                        items[key] = decoded
+                    } else if let error = value.error {
+                        \(reporter).report(error: error, decoding: (\(valueType)).self, forKey: key, of: "\(raw: pattern.identifier.description)", in: (\(container)).self)
+                    }
+                }
+
+                self.\(pattern.identifier) = items
+            } catch {
+                self.\(pattern.identifier) = [:]
+                \(reporter).report(error: error, of: "\(raw: pattern.identifier.description)", decoding: (Dictionary<\(keyType), SafeDecodable<\(valueType)>>).self, in: (\(container)).self)
+            }
+            """
+        } else {
+            """
+            self.\(pattern.identifier) = ((try? container.decode((Dictionary<\(keyType), SafeDecodable<\(valueType)>>).self, forKey: .\(pattern.identifier))) ?? [:]).reduce(into: [:]) { $0[$1.key] = $1.value.decoded }
+            """
+        }
     }
 }
 

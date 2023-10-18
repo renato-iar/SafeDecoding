@@ -74,11 +74,5 @@ package.products.append(contentsOf: [
         targets: [
             "SafeDecoding"
         ]
-    ),
-    .executable(
-        name: "SafeDecodingClient",
-        targets: [
-            "SafeDecodingClient"
-        ]
     )
 ])
