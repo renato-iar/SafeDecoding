@@ -36,6 +36,11 @@ extension SafeDecodingMacro: ExtensionMacro {
             return []
         }
 
+        let accessModifier = if let accessControl = Self.accessControl(decl: declaration) {
+            accessControl.rawValue + " "
+        } else {
+            ""
+        }
         let typeProperties: [(PatternBindingListSyntax.Element, Bool)] = memberBlock
             .members
             .compactMap {
@@ -49,7 +54,7 @@ extension SafeDecodingMacro: ExtensionMacro {
         let notComputedNonInitializedTypeProperties = typeProperties.filter { !$0.0.isComputed && !$0.0.isInitialized }
         let reporter = node.as(AttributeSyntax.self)?.arguments?.as(LabeledExprListSyntax.self)?.first?.expression
 
-        let initializer = try InitializerDeclSyntax("public init(from decoder: Decoder) throws") {
+        let initializer = try InitializerDeclSyntax("\(raw: accessModifier)init(from decoder: Decoder) throws") {
             if !notComputedNonInitializedTypeProperties.isEmpty {
                 CodeBlockItemSyntax(
                 """
@@ -138,6 +143,26 @@ extension SafeDecodingMacro: ExtensionMacro {
 // MARK: - Utils
 
 private extension SafeDecodingMacro {
+    enum AccessControl: String {
+        case `open`
+        case `public`
+        case `package`
+        case `internal`
+        case `private`
+    }
+
+    static func accessControl(decl: DeclGroupSyntax) -> AccessControl? {
+        decl
+            .modifiers
+            .compactMap {
+                $0.as(DeclModifierSyntax.self)
+                    .flatMap {
+                        AccessControl(rawValue: $0.name.text)
+                    }
+            }
+            .first
+    }
+
     static func shouldIgnore(property decl: VariableDeclSyntax) -> Bool {
         [
             decl

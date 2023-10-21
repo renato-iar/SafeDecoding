@@ -39,7 +39,7 @@ extension SafeDecodingTests {
                         case optional
                         case optionalGeneric
                     }
-                    public init(from decoder: Decoder) throws {
+                    init(from decoder: Decoder) throws {
                         let container = try decoder.container(keyedBy: CodingKeys.self)
                         self.optional = try? container.decode((Optional<Int>).self, forKey: .optional)
                         self.optionalGeneric = try? container.decode((Optional<Int>).self, forKey: .optionalGeneric)
@@ -73,7 +73,7 @@ extension SafeDecodingTests {
                     private enum CodingKeys: CodingKey {
                         case set
                     }
-                    public init(from decoder: Decoder) throws {
+                    init(from decoder: Decoder) throws {
                         let container = try decoder.container(keyedBy: CodingKeys.self)
                         self.set = ((try? container.decode((Array<SafeDecodable<Int>>).self, forKey: .set)) ?? []).reduce(into: Set<Int>()) { set, safe in
                             _ = safe.decoded.flatMap { value in
@@ -113,7 +113,7 @@ extension SafeDecodingTests {
                         case array
                         case arrayGeneric
                     }
-                    public init(from decoder: Decoder) throws {
+                    init(from decoder: Decoder) throws {
                         let container = try decoder.container(keyedBy: CodingKeys.self)
                         self.array = ((try? container.decode((Array<SafeDecodable<Int>>).self, forKey: .array)) ?? []).compactMap {
                             $0.decoded
@@ -154,7 +154,7 @@ extension SafeDecodingTests {
                         case dictionary
                         case dictionaryGeneric
                     }
-                    public init(from decoder: Decoder) throws {
+                    init(from decoder: Decoder) throws {
                         let container = try decoder.container(keyedBy: CodingKeys.self)
                         self.dictionary = ((try? container.decode((Dictionary<Int, SafeDecodable<Int>>).self, forKey: .dictionary)) ?? [:]).reduce(into: [:]) {
                             $0 [$1.key] = $1.value.decoded
@@ -198,7 +198,7 @@ extension SafeDecodingTests {
                         case optional
                         case optionalGeneric
                     }
-                    public init(from decoder: Decoder) throws {
+                    init(from decoder: Decoder) throws {
                         let container = try decoder.container(keyedBy: CodingKeys.self)
                         do {
                             self.optional = try container.decode((Int).self, forKey: .optional)
@@ -242,7 +242,7 @@ extension SafeDecodingTests {
                     private enum CodingKeys: CodingKey {
                         case set
                     }
-                    public init(from decoder: Decoder) throws {
+                    init(from decoder: Decoder) throws {
                         let container = try decoder.container(keyedBy: CodingKeys.self)
                         do {
                             let decodedItems = try container.decode((Array<SafeDecodable<Int>>).self, forKey: .set)
@@ -294,7 +294,7 @@ extension SafeDecodingTests {
                         case array
                         case arrayGeneric
                     }
-                    public init(from decoder: Decoder) throws {
+                    init(from decoder: Decoder) throws {
                         let container = try decoder.container(keyedBy: CodingKeys.self)
                         do {
                             let decodedArray = try container.decode((Array<SafeDecodable<Int>>).self, forKey: .array)
@@ -363,7 +363,7 @@ extension SafeDecodingTests {
                         case dictionary
                         case dictionaryGeneric
                     }
-                    public init(from decoder: Decoder) throws {
+                    init(from decoder: Decoder) throws {
                         let container = try decoder.container(keyedBy: CodingKeys.self)
                         do {
                             let decodedItems = try container.decode((Dictionary<Int, SafeDecodable<Int>>).self, forKey: .dictionary)
@@ -431,7 +431,7 @@ extension SafeDecodingTests {
                 extension Model {
                     private enum CodingKeys: CodingKey {
                     }
-                    public init(from decoder: Decoder) throws {
+                    init(from decoder: Decoder) throws {
                     }
                 }
                 """,
@@ -463,7 +463,7 @@ extension SafeDecodingTests {
                 extension Model {
                     private enum CodingKeys: CodingKey {
                     }
-                    public init(from decoder: Decoder) throws {
+                    init(from decoder: Decoder) throws {
                     }
                 }
                 """,
@@ -475,6 +475,158 @@ extension SafeDecodingTests {
 
 
 
+    }
+}
+
+extension SafeDecodingTests {
+    func testSafeDecodingMacroRespectsDefaultAccessModifier() throws {
+#if canImport(SafeDecodingMacros)
+        assertMacroExpansion(
+                """
+                @SafeDecoding
+                struct Model {
+                    let computed: Int = 0
+                }
+                """,
+                expandedSource:
+                """
+
+                struct Model {
+                    let computed: Int = 0
+                }
+
+                extension Model {
+                    private enum CodingKeys: CodingKey {
+                    }
+                    init(from decoder: Decoder) throws {
+                    }
+                }
+                """,
+                macros: testMacros
+        )
+#else
+        throw XCTSkip("macros are only supported when running tests for the host platform")
+#endif
+    }
+
+    func testSafeDecodingMacroRespectsInternalAccessModifier() throws {
+#if canImport(SafeDecodingMacros)
+        assertMacroExpansion(
+                """
+                @SafeDecoding
+                internal struct Model {
+                    let computed: Int = 0
+                }
+                """,
+                expandedSource:
+                """
+
+                internal struct Model {
+                    let computed: Int = 0
+                }
+
+                extension Model {
+                    private enum CodingKeys: CodingKey {
+                    }
+                    internal init(from decoder: Decoder) throws {
+                    }
+                }
+                """,
+                macros: testMacros
+        )
+#else
+        throw XCTSkip("macros are only supported when running tests for the host platform")
+#endif
+    }
+
+    func testSafeDecodingMacroRespectsPackageAccessModifier() throws {
+#if canImport(SafeDecodingMacros)
+        assertMacroExpansion(
+                """
+                @SafeDecoding
+                package struct Model {
+                    let computed: Int = 0
+                }
+                """,
+                expandedSource:
+                """
+
+                package struct Model {
+                    let computed: Int = 0
+                }
+
+                extension Model {
+                    private enum CodingKeys: CodingKey {
+                    }
+                    package init(from decoder: Decoder) throws {
+                    }
+                }
+                """,
+                macros: testMacros
+        )
+#else
+        throw XCTSkip("macros are only supported when running tests for the host platform")
+#endif
+    }
+
+    func testSafeDecodingMacroRespectsPublicAccessModifier() throws {
+#if canImport(SafeDecodingMacros)
+        assertMacroExpansion(
+                """
+                @SafeDecoding
+                public struct Model {
+                    let computed: Int = 0
+                }
+                """,
+                expandedSource:
+                """
+
+                public struct Model {
+                    let computed: Int = 0
+                }
+
+                extension Model {
+                    private enum CodingKeys: CodingKey {
+                    }
+                    public init(from decoder: Decoder) throws {
+                    }
+                }
+                """,
+                macros: testMacros
+        )
+#else
+        throw XCTSkip("macros are only supported when running tests for the host platform")
+#endif
+    }
+
+    func testSafeDecodingMacroRespectsOpenAccessModifier() throws {
+#if canImport(SafeDecodingMacros)
+        assertMacroExpansion(
+                """
+                @SafeDecoding
+                open struct Model {
+                    let computed: Int = 0
+                }
+                """,
+                expandedSource:
+                """
+
+                open struct Model {
+                    let computed: Int = 0
+                }
+
+                extension Model {
+                    private enum CodingKeys: CodingKey {
+                    }
+                    open init(from decoder: Decoder) throws {
+                    }
+                }
+                """,
+                macros: testMacros
+        )
+#else
+        throw XCTSkip("macros are only supported when running tests for the host platform")
+#endif
     }
 }
 
