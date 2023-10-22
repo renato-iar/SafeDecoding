@@ -229,7 +229,7 @@ private extension SafeDecodingMacro {
         return if let reporter {
             """
             do {
-                self.\(pattern.identifier) = try container.decode((\(elementType)).self, forKey: .\(pattern.identifier))
+                self.\(pattern.identifier) = try container.decodeIfPresent((\(elementType)).self, forKey: .\(pattern.identifier))
             } catch {
                 self.\(pattern.identifier) = nil
                 \(reporter).report(error: error, of: "\(raw: pattern.identifier.description)", decoding: (Optional<\(elementType)>).self, in: (\(container)).self)
