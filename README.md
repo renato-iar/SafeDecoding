@@ -92,6 +92,32 @@ struct Book {
 
 This will cause `synopsis` to not be safely decoded in the initializer.
 
+The `@FallbackDecoding` macro can be used to grant fallback semantics to properties.
+`@FallbackDecoding` must be used with `@SafeDecoding`, and means decoding will never fail properties it is applied to (even if the type is not otherwise "safe-decodable"):
+
+```swift
+@SafeDecoding
+struct Book {
+    @FallbackDecoding(false)
+    var isFavourite: Bool
+}
+```
+
+The `RetryDecoding` macro can in turn be used to provide alternative decoding of a property; an alternative decoding type and a "mapper" between types must be provided.
+An example could be a backend that sometimes returns integers as strings, or booleans as integers:
+
+```swift
+@SafeDecoding
+struct Book {
+    @RetryDecoding(String.self, map: { $0.lowercased() == "true" })
+    @RetryDecoding(Int.self, map: { $0 != 0 })
+    var isFavourite: Bool
+}
+```
+
+Retries will be performed in the same order as they are declared in the property.
+If `@FallbackDecoding` is used alongside retries, all retries will be attempted before the value specified for fallback is used.
+
 ## Installation
 
 ### Swift Package Manager
@@ -102,3 +128,42 @@ You can use the Swift Package Manager to install your package by adding it as a 
 dependencies: [
     .package(url: "https://github.com/renato-iar/SafeDecoding.git", from: "1.0.0")
 ]
+```
+
+Finally, `@SafeDecoding` can report errors that occur (and are recovered from) during the decoding process.
+This is done by passing the `reporter:` parameter to the macro:
+
+```swift
+@SafeDecoding(reporter: ...)
+struct Book {
+    ....
+}
+```
+
+The reporter must conform the `SafeDecodingReporter` protocol.
+Upon recovery of decoding errors, the reporter will be called with information about said error.
+Remember that a reporter is local to its type, i.e. although the same type may be used everywhere **each @SafeDecoding usage must be given its reporter expression**.
+
+# Versions
+
+## Version 1.3.0
+
+- Add `@RetryDecoding`, allowing individual properties to have associated retries
+- Add `@FallbackDecoding`, allowing individual properties to provide a last-resort value 
+
+## Version 1.2.1
+
+- Bug: uses `decodeIfPresent` for optionals when using error reporting
+
+## Version 1.2.0
+
+- Accounts for access modifiers
+
+## Version 1.1.0
+
+- Add error reporting to `@SafeDecoding` macro
+- Remove sample client product
+
+## Version 1.0.0
+
+- Add `@SafeDecoding` and `@IgnoreSafeDecoding` macros

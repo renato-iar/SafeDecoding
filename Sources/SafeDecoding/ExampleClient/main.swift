@@ -48,10 +48,11 @@ struct SubModel {
     let strings: Array<String>
 }
 
+// Expand macro to see code generated for the base usage of @SafeDecoding
+
 @SafeDecoding
-struct NonReportedModel {
+struct ModelStandardExample {
     let integer: Int
-    @IgnoreSafeDecoding
     let integerArray: [Int]
     let genericArray: Array<String>
     let string: String
@@ -64,15 +65,26 @@ struct NonReportedModel {
     let constantInferred = 0
 }
 
+// Expand macro to see code generated for extended usage of @SafeDecoding
+// using the reporter, as well as @RetryDecoding, @FallbackDecoding and @IgnoreSafeDecoding
+// macros as decorators
+
 @SafeDecoding(reporter: SafeDecodingErrorReporter.shared)
-struct ReportedModel {
+struct ModelFullExample {
+    @RetryDecoding(String.self, map: { Int($0, radix: 10) })
+    @RetryDecoding(Double.self, map: { Int($0) })
     let integer: Int
     @IgnoreSafeDecoding
     let integerArray: [Int]
     let genericArray: Array<String>
+    @FallbackDecoding(UUID().uuidString)
     let string: String
     let dictionary: [String: Int]
+    @FallbackDecoding(0)
+    @RetryDecoding(String.self, map: { Int($0, radix: 10) })
+    @RetryDecoding(Double.self, map: { Int($0) })
     let optionalInteger: Int?
+    @FallbackDecoding(SubModel(strings: []))
     let subModel: SubModel?
     var numberOfIntegersInArray: Int { integerArray.count }
     let set: Set<Int>
@@ -83,7 +95,7 @@ struct ReportedModel {
 let input = """
 {
     "integerArray": [1, 2, 3],
-    "integer": 0,
+    "integer": "101",
     "string": "hello",
     "dictionary": {
         "a": 1,
@@ -99,7 +111,7 @@ let input = """
 do {
     if let data = input.data(using: .utf8) {
         let model = try JSONDecoder().decode(
-            ReportedModel.self,
+            ModelFullExample.self,
             from: data
         )
 
