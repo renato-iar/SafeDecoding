@@ -9,11 +9,12 @@ import SafeDecodingMacros
 
 let testMacros: [String: Macro.Type] = [
     "SafeDecoding": SafeDecodingMacro.self,
+    "RetryDecoding": RetryDecodingMacro.self,
+    "FallbackDecoding": FallbackDecodingMacro.self
 ]
 #endif
 
-final class SafeDecodingTests: XCTestCase {
-}
+final class SafeDecodingTests: XCTestCase { }
 
 extension SafeDecodingTests {
     func testSafeDecodingOfOptional() throws {
@@ -41,8 +42,8 @@ extension SafeDecodingTests {
                     }
                     init(from decoder: Decoder) throws {
                         let container = try decoder.container(keyedBy: CodingKeys.self)
-                        self.optional = try? container.decode((Optional<Int>).self, forKey: .optional)
-                        self.optionalGeneric = try? container.decode((Optional<Int>).self, forKey: .optionalGeneric)
+                        self.optional = try? container.decode(Int.self, forKey: .optional)
+                        self.optionalGeneric = try? container.decode(Int.self, forKey: .optionalGeneric)
                     }
                 }
                 """,
@@ -75,7 +76,7 @@ extension SafeDecodingTests {
                     }
                     init(from decoder: Decoder) throws {
                         let container = try decoder.container(keyedBy: CodingKeys.self)
-                        self.set = ((try? container.decode((Array<SafeDecodable<Int>>).self, forKey: .set)) ?? []).reduce(into: Set<Int>()) { set, safe in
+                        self.set = ((try? container.decode([SafeDecodable<Int>].self, forKey: .set)) ?? []).reduce(into: Set<Int>()) { set, safe in
                             _ = safe.decoded.flatMap { value in
                                 set.insert(value)
                             }
@@ -115,10 +116,10 @@ extension SafeDecodingTests {
                     }
                     init(from decoder: Decoder) throws {
                         let container = try decoder.container(keyedBy: CodingKeys.self)
-                        self.array = ((try? container.decode((Array<SafeDecodable<Int>>).self, forKey: .array)) ?? []).compactMap {
+                        self.array = ((try? container.decode([SafeDecodable<Int>].self, forKey: .array)) ?? []).compactMap {
                             $0.decoded
                         }
-                        self.arrayGeneric = ((try? container.decode((Array<SafeDecodable<Int>>).self, forKey: .arrayGeneric)) ?? []).compactMap {
+                        self.arrayGeneric = ((try? container.decode([SafeDecodable<Int>].self, forKey: .arrayGeneric)) ?? []).compactMap {
                             $0.decoded
                         }
                     }
@@ -156,10 +157,10 @@ extension SafeDecodingTests {
                     }
                     init(from decoder: Decoder) throws {
                         let container = try decoder.container(keyedBy: CodingKeys.self)
-                        self.dictionary = ((try? container.decode((Dictionary<Int, SafeDecodable<Int>>).self, forKey: .dictionary)) ?? [:]).reduce(into: [:]) {
+                        self.dictionary = ((try? container.decode([Int: SafeDecodable<Int>].self, forKey: .dictionary)) ?? [:]).reduce(into: [:]) {
                             $0 [$1.key] = $1.value.decoded
                         }
-                        self.dictionaryGeneric = ((try? container.decode((Dictionary<Int, SafeDecodable<Int>>).self, forKey: .dictionaryGeneric)) ?? [:]).reduce(into: [:]) {
+                        self.dictionaryGeneric = ((try? container.decode([Int: SafeDecodable<Int>].self, forKey: .dictionaryGeneric)) ?? [:]).reduce(into: [:]) {
                             $0 [$1.key] = $1.value.decoded
                         }
                     }
@@ -201,16 +202,16 @@ extension SafeDecodingTests {
                     init(from decoder: Decoder) throws {
                         let container = try decoder.container(keyedBy: CodingKeys.self)
                         do {
-                            self.optional = try container.decode((Int).self, forKey: .optional)
+                            self.optional = try container.decodeIfPresent(Int.self, forKey: .optional)
                         } catch {
                             self.optional = nil
-                            reporter.report(error: error, of: "optional", decoding: (Optional<Int>).self, in: (Model).self)
+                            reporter.report(error: error, of: "optional", decoding: Int?.self, in: (Model).self)
                         }
                         do {
-                            self.optionalGeneric = try container.decode((Int).self, forKey: .optionalGeneric)
+                            self.optionalGeneric = try container.decodeIfPresent(Int.self, forKey: .optionalGeneric)
                         } catch {
                             self.optionalGeneric = nil
-                            reporter.report(error: error, of: "optionalGeneric", decoding: (Optional<Int>).self, in: (Model).self)
+                            reporter.report(error: error, of: "optionalGeneric", decoding: Int?.self, in: (Model).self)
                         }
                     }
                 }
@@ -245,14 +246,14 @@ extension SafeDecodingTests {
                     init(from decoder: Decoder) throws {
                         let container = try decoder.container(keyedBy: CodingKeys.self)
                         do {
-                            let decodedItems = try container.decode((Array<SafeDecodable<Int>>).self, forKey: .set)
+                            let decodedItems = try container.decode([SafeDecodable<Int>].self, forKey: .set)
                             var items: Set<Int> = []
 
                             for item in decodedItems {
                                 if let decoded = item.decoded {
                                     items.insert(decoded)
                                 } else if let error = item.error {
-                                    reporter.report(error: error, decoding: (Int).self, of: "set", in: (Model).self)
+                                    reporter.report(error: error, decoding: Int.self, of: "set", in: (Model).self)
                                 }
                             }
 
@@ -297,38 +298,38 @@ extension SafeDecodingTests {
                     init(from decoder: Decoder) throws {
                         let container = try decoder.container(keyedBy: CodingKeys.self)
                         do {
-                            let decodedArray = try container.decode((Array<SafeDecodable<Int>>).self, forKey: .array)
+                            let decodedArray = try container.decode([SafeDecodable<Int>].self, forKey: .array)
                             var items: [Int] = []
 
                             for (index, item) in decodedArray.enumerated() {
                                 if let decoded = item.decoded {
                                     items.append(decoded)
                                 } else if let error = item.error {
-                                    reporter.report(error: error, decoding: (Int).self, at: index, of: "array", in: (Model).self)
+                                    reporter.report(error: error, decoding: Int.self, at: index, of: "array", in: (Model).self)
                                 }
                             }
 
                             self.array = items
                         } catch {
                             self.array = []
-                            reporter.report(error: error, of: "array", decoding: Array<Int> .self, in: (Model).self)
+                            reporter.report(error: error, of: "array", decoding: [Int].self, in: (Model).self)
                         }
                         do {
-                            let decodedArray = try container.decode((Array<SafeDecodable<Int>>).self, forKey: .arrayGeneric)
+                            let decodedArray = try container.decode([SafeDecodable<Int>].self, forKey: .arrayGeneric)
                             var items: [Int] = []
 
                             for (index, item) in decodedArray.enumerated() {
                                 if let decoded = item.decoded {
                                     items.append(decoded)
                                 } else if let error = item.error {
-                                    reporter.report(error: error, decoding: (Int).self, at: index, of: "arrayGeneric", in: (Model).self)
+                                    reporter.report(error: error, decoding: Int.self, at: index, of: "arrayGeneric", in: (Model).self)
                                 }
                             }
 
                             self.arrayGeneric = items
                         } catch {
                             self.arrayGeneric = []
-                            reporter.report(error: error, of: "arrayGeneric", decoding: Array<Int> .self, in: (Model).self)
+                            reporter.report(error: error, of: "arrayGeneric", decoding: [Int].self, in: (Model).self)
                         }
                     }
                 }
@@ -366,38 +367,38 @@ extension SafeDecodingTests {
                     init(from decoder: Decoder) throws {
                         let container = try decoder.container(keyedBy: CodingKeys.self)
                         do {
-                            let decodedItems = try container.decode((Dictionary<Int, SafeDecodable<Int>>).self, forKey: .dictionary)
-                            var items: Dictionary<Int, Int> = [:]
+                            let decodedItems = try container.decode([Int: SafeDecodable<Int>].self, forKey: .dictionary)
+                            var items: [Int: Int] = [:]
 
                             for (key, value) in decodedItems {
                                 if let decoded = value.decoded {
                                     items[key] = decoded
                                 } else if let error = value.error {
-                                    reporter.report(error: error, decoding: (Int).self, forKey: key, of: "dictionary", in: (Model).self)
+                                    reporter.report(error: error, decoding: Int.self, forKey: key, of: "dictionary", in: (Model).self)
                                 }
                             }
 
                             self.dictionary = items
                         } catch {
                             self.dictionary = [:]
-                            reporter.report(error: error, of: "dictionary", decoding: (Dictionary<Int, SafeDecodable<Int>>).self, in: (Model).self)
+                            reporter.report(error: error, of: "dictionary", decoding: [Int: SafeDecodable<Int>].self, in: (Model).self)
                         }
                         do {
-                            let decodedItems = try container.decode((Dictionary<Int, SafeDecodable<Int>>).self, forKey: .dictionaryGeneric)
-                            var items: Dictionary<Int, Int> = [:]
+                            let decodedItems = try container.decode([Int: SafeDecodable<Int>].self, forKey: .dictionaryGeneric)
+                            var items: [Int: Int] = [:]
 
                             for (key, value) in decodedItems {
                                 if let decoded = value.decoded {
                                     items[key] = decoded
                                 } else if let error = value.error {
-                                    reporter.report(error: error, decoding: (Int).self, forKey: key, of: "dictionaryGeneric", in: (Model).self)
+                                    reporter.report(error: error, decoding: Int.self, forKey: key, of: "dictionaryGeneric", in: (Model).self)
                                 }
                             }
 
                             self.dictionaryGeneric = items
                         } catch {
                             self.dictionaryGeneric = [:]
-                            reporter.report(error: error, of: "dictionaryGeneric", decoding: (Dictionary<Int, SafeDecodable<Int>>).self, in: (Model).self)
+                            reporter.report(error: error, of: "dictionaryGeneric", decoding: [Int: SafeDecodable<Int>].self, in: (Model).self)
                         }
                     }
                 }
@@ -631,6 +632,100 @@ extension SafeDecodingTests {
 }
 
 extension SafeDecodingTests {
+    func testSafeDecodingRetryDecoding() throws {
+#if canImport(SafeDecodingMacros)
+        assertMacroExpansion(
+                """
+                @SafeDecoding(reporter: SafeDecodingErrorReporter.shared)
+                struct Model {
+                    @RetryDecoding(String.self, map: { Int.init($0, radix: 10) })
+                    let int: Int
+                }
+                """,
+                expandedSource:
+                """
+
+                struct Model {
+                    let int: Int
+                }
+
+                extension Model {
+                    private enum CodingKeys: CodingKey {
+                        case int
+                    }
+                    init(from decoder: Decoder) throws {
+                        let container = try decoder.container(keyedBy: CodingKeys.self)
+                        do {
+                            self.int = try container.decode(Int.self, forKey: .int)
+                        } catch {
+                            if let retry = (try? container.decode(String.self, forKey: .int)).flatMap({
+                                    Int.init($0, radix: 10)
+                                }) {
+                                self.int = retry
+                                SafeDecodingErrorReporter.shared.report(error: error, of: "int", decoding: Int.self, in: (Model).self)
+                            } else {
+                                throw error
+                            }
+                        }
+                    }
+                }
+                """,
+                macros: testMacros
+        )
+#else
+        throw XCTSkip("macros are only supported when running tests for the host platform")
+#endif
+
+
+
+    }
+
+    func testSafeDecodingFallbackDecoding() throws {
+
+#if canImport(SafeDecodingMacros)
+        assertMacroExpansion(
+                """
+                @SafeDecoding(reporter: SafeDecodingErrorReporter.shared)
+                struct Model {
+                    @FallbackDecoding(Int.random(in: 0 ..< 1000))
+                    let int: Int
+                }
+                """,
+                expandedSource:
+                """
+
+                struct Model {
+                    let int: Int
+                }
+
+                extension Model {
+                    private enum CodingKeys: CodingKey {
+                        case int
+                    }
+                    init(from decoder: Decoder) throws {
+                        let container = try decoder.container(keyedBy: CodingKeys.self)
+                        do {
+                            self.int = try container.decode(Int.self, forKey: .int)
+                        } catch {
+                            self.int = Int.random(in: 0 ..< 1000)
+                            SafeDecodingErrorReporter.shared.report(error: error, of: "int", decoding: Int.self, in: (Model).self)
+                        }
+                    }
+                }
+                """,
+                macros: testMacros
+        )
+#else
+        throw XCTSkip("macros are only supported when running tests for the host platform")
+#endif
+
+
+
+
+    }
+}
+
+extension SafeDecodingTests {
     func testMacro() throws {
         #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
@@ -671,16 +766,16 @@ extension SafeDecodingTests {
                 }
                 public init(from decoder: Decoder) throws {
                     let container = try decoder.container(keyedBy: CodingKeys.self)
-                    self.integer = try container.decode((Int ).self, forKey: .integer)
-                    self.optional = try? container.decode((Optional<Int>).self, forKey: .optional)
-                    self.array = try container.decode(([Int]).self, forKey: .array)
-                    self.genericArray = ((try? container.decode((Array<SafeDecodable<Int>>).self, forKey: .genericArray)) ?? []).compactMap {
+                    self.integer = try container.decode(Int .self, forKey: .integer)
+                    self.optional = try? container.decode(Int.self, forKey: .optional)
+                    self.array = try container.decode([Int].self, forKey: .array)
+                    self.genericArray = ((try? container.decode([SafeDecodable<Int>].self, forKey: .genericArray)) ?? []).compactMap {
                         $0.decoded
                     }
-                    self.dictionary = ((try? container.decode((Dictionary<Int, SafeDecodable<Int>>).self, forKey: .dictionary)) ?? [:]).reduce(into: [:]) {
+                    self.dictionary = ((try? container.decode([Int: SafeDecodable<Int>].self, forKey: .dictionary)) ?? [:]).reduce(into: [:]) {
                         $0 [$1.key] = $1.value.decoded
                     }
-                    self.genericDictionary = ((try? container.decode((Dictionary<Int, SafeDecodable<Int>>).self, forKey: .genericDictionary)) ?? [:]).reduce(into: [:]) {
+                    self.genericDictionary = ((try? container.decode([Int: SafeDecodable<Int>].self, forKey: .genericDictionary)) ?? [:]).reduce(into: [:]) {
                         $0 [$1.key] = $1.value.decoded
                     }
                 }
