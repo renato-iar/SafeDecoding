@@ -15,7 +15,39 @@ Swift Macro enabling safe decoding of `struct`s and `class`es.
 
 - Requires Swift 5.9
 
-## Example Usage
+# Versions
+
+## Version 1.4.0
+
+- Add `@SafeDecoding(decodingStrategy:)` and `@SafeDecoding(decodingStrategy:reporter:)` for `enum`s
+- Add `EnumCaseDecodingStrategy` to describe decoding strategy for `enum`s
+
+## Version 1.3.0
+
+- Add `@RetryDecoding`, allowing individual properties to have associated retries
+- Add `@FallbackDecoding`, allowing individual properties to provide a last-resort value 
+
+## Version 1.2.1
+
+- Bug: uses `decodeIfPresent` for optionals when using error reporting
+
+## Version 1.2.0
+
+- Accounts for access modifiers
+
+## Version 1.1.0
+
+- Add error reporting to `@SafeDecoding` macro
+- Remove sample client product
+
+## Version 1.0.0
+
+- Add `@SafeDecoding` and `@IgnoreSafeDecoding` macros
+
+
+# Example Usage
+
+## Structs & Classes
 
 A common problem is when an otherwise non-mandatory part of a model contains invalid/missing data, causing an entire payload to fail.
 In the following example we have a `Book` model, for which we'll retrieve an array from some backend.
@@ -118,17 +150,77 @@ struct Book {
 Retries will be performed in the same order as they are declared in the property.
 If `@FallbackDecoding` is used alongside retries, all retries will be attempted before the value specified for fallback is used.
 
-## Installation
+## Enums
 
-### Swift Package Manager
+Decoding of `enum`s uses the same `@SafeDecoding` macro, but requires the `decodingStrategy` to be specified.
+The strategy is itself an enumeration (`EnumCaseDecodingStrategy`) which holds two cases:
 
-You can use the Swift Package Manager to install your package by adding it as a dependency to your `Package.swift` file:
+### `caseByObjectProperty(String)`
+A property name must be specified; this will be itself decoded as a string matching the cases of the `enum`.
+E.g. for the following `enum`:
 
 ```swift
-dependencies: [
-    .package(url: "https://github.com/renato-iar/SafeDecoding.git", from: "1.0.0")
-]
+@SafeDecoding(decodingStrategy: .caseByObjectProperty("type")
+enum MediaAsset {
+    case vod(...)
+    case series(...)
+    case episode(...)
+    ...
+}
 ```
+
+A property `type` will be decoded, and matched with a case in the `MediaAsset` type:
+
+```json
+{
+    "type": "vod",
+    "title": "...",
+    ...
+}
+```
+
+This will result in a `.vod` being decoded.
+The specified property may or may not be part of the final model.
+ 
+### `caseByNestedObject`
+
+The standard strategy used when auto-decoding is used, will attempt to decode a root property for each of the `enum`s cases, then decoding the case's parameters.
+For the same example specified above, decoding a `vod` case would require a payload like the one below:
+
+```json
+{
+    "vod": {
+        "title": "...",
+        ...
+    }
+}
+```
+
+The literal name used for an `enum` case will be the case itself by default, but may be overriden using the `@CaseNameDecoding` macro:
+
+```swift
+@SafeDecoding(decodingStrategy: .caseByObjectProperty("type"))
+enum MediaAssetKeyed {
+    @CaseNameDecoding("ASSET/PROGRAMME")
+    case vod(String?, String)
+    @CaseNameDecoding("ASSET/SERIES")
+    case series(id: String, Set<String>)
+    @CaseNameDecoding("ASSET/EPISODE")
+    case episode(id: String, title: String, arguments: [String: Double])
+}
+```
+
+This will try to match `case`s by decoding a `type` property, with the property's type itself matching the specified names:
+
+```swift
+{
+    "type": "ASSET/EPISODE",
+    "id": "...",
+    ...
+}
+```
+
+## Error Reporting
 
 Finally, `@SafeDecoding` can report errors that occur (and are recovered from) during the decoding process.
 This is done by passing the `reporter:` parameter to the macro:
@@ -140,30 +232,27 @@ struct Book {
 }
 ```
 
+The same applies to `enum` decoding:
+
+```swift
+@SafeDecoding(decodingStrategy: ..., reporter: ...)
+```
+enum MediaAsset {
+    ...
+}
+
 The reporter must conform the `SafeDecodingReporter` protocol.
 Upon recovery of decoding errors, the reporter will be called with information about said error.
 Remember that a reporter is local to its type, i.e. although the same type may be used everywhere **each @SafeDecoding usage must be given its reporter expression**.
 
-# Versions
+# Installation
 
-## Version 1.3.0
+## Swift Package Manager
 
-- Add `@RetryDecoding`, allowing individual properties to have associated retries
-- Add `@FallbackDecoding`, allowing individual properties to provide a last-resort value 
+You can use the Swift Package Manager to install your package by adding it as a dependency to your `Package.swift` file:
 
-## Version 1.2.1
-
-- Bug: uses `decodeIfPresent` for optionals when using error reporting
-
-## Version 1.2.0
-
-- Accounts for access modifiers
-
-## Version 1.1.0
-
-- Add error reporting to `@SafeDecoding` macro
-- Remove sample client product
-
-## Version 1.0.0
-
-- Add `@SafeDecoding` and `@IgnoreSafeDecoding` macros
+```swift
+dependencies: [
+    .package(url: "https://github.com/renato-iar/SafeDecoding.git", from: "1.0.0")
+]
+```

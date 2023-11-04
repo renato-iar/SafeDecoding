@@ -1,6 +1,7 @@
 import Foundation
 import SafeDecoding
 
+/// Sample error reporter
 class SafeDecodingErrorReporter: SafeDecodingReporter {
     func report<Container, Property>(
         error: Error,
@@ -50,7 +51,7 @@ struct SubModel {
 
 // Expand macro to see code generated for the base usage of @SafeDecoding
 
-@SafeDecoding
+@SafeDecoding(reporter: SafeDecodingErrorReporter.shared)
 struct ModelStandardExample {
     let integer: Int
     let integerArray: [Int]
@@ -92,33 +93,92 @@ struct ModelFullExample {
     let constantInferred = 0
 }
 
-let input = """
-{
-    "integerArray": [1, 2, 3],
-    "integer": "101",
-    "string": "hello",
-    "dictionary": {
-        "a": 1,
-        "b": 2
-    },
-    "optionalInteger": "1",
-    "subModel": {
-        "strings": ["1", 2, "3"]
+// Decoding tests
+
+func testDecoding<T: Decodable>(_: T.Type, input: String) {
+    do {
+        if let data = input.data(using: .utf8) {
+            let model = try JSONDecoder().decode(
+                T.self,
+                from: data
+            )
+
+            dump(model)
+        } else {
+            print("===> data conversion failed for type \(T.self)")
+        }
+    } catch {
+        print("===> error for type \(T.self): \(error)")
     }
 }
-"""
 
-do {
-    if let data = input.data(using: .utf8) {
-        let model = try JSONDecoder().decode(
-            ModelFullExample.self,
-            from: data
-        )
+testDecoding(
+    ModelFullExample.self,
+    input:
+            """
+            {
+                "integerArray": [1, 2, 3],
+                "integer": "101",
+                "string": "hello",
+                "dictionary": {
+                    "a": 1,
+                    "b": 2
+                },
+                "optionalInteger": "1",
+                "subModel": {
+                    "strings": ["1", 2, "3"]
+                }
+            }
+            """
+)
 
-        dump(model)
-    } else {
-        print("===> data conversion failed")
-    }
-} catch {
-    print("===> failed: \(error)")
+@SafeDecoding(decodingStrategy: .caseByNestedObject, reporter: SafeDecodingErrorReporter.shared)
+enum MediaAssetNested {
+    @CaseNameDecoding("ASSET/PROGRAMME")
+    case vod(String?, String)
+    @CaseNameDecoding("ASSET/SERIES")
+    case series(id: [String], Set<String>)
+    @CaseNameDecoding("ASSET/EPISODE")
+    case episode(id: String, title: String, arguments: [String: Double])
+    case placeholder
 }
+
+testDecoding(
+    MediaAssetNested.self,
+    input:
+        """
+        {
+            "ASSET/SERIES": {
+                "id": "vod-id",
+                "_1": "vod title"
+            }
+        }
+        """
+)
+
+@SafeDecoding(decodingStrategy: .caseByObjectProperty("type"), reporter: SafeDecodingErrorReporter.shared)
+enum MediaAssetKeyed {
+    @CaseNameDecoding("ASSET/PROGRAMME")
+    case vod(String?, String)
+    @CaseNameDecoding("ASSET/SERIES")
+    case series(id: [String], Set<String>)
+    @CaseNameDecoding("ASSET/EPISODE")
+    case episode(id: String, title: String, arguments: [String: Double])
+    @CaseNameDecoding("ASSET/PLACEHOLDER")
+    case placeholder
+}
+
+testDecoding(
+    MediaAssetKeyed.self,
+    input:
+        """
+        {
+            "type": "ASSET/EPISODE",
+            "id": "vod-id",
+            "title": "vod title",
+            "arguments": {
+                "sample": 0
+            }
+        }
+        """
+)

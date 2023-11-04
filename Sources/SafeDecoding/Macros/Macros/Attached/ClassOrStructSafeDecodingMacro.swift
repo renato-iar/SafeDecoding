@@ -5,7 +5,7 @@ import SwiftSyntaxMacros
 /**
  Implements safe decoding for `struct`s
 
- The `SafeDecodingMacro` will add conformance to `Decodable` and custom-implement
+ The `ClassOrStructSafeDecodingMacro` will add conformance to `Decodable` and custom-implement
  its initializer. For all properties suitable properties it will implement custom, safe decoding.
  Suitable properties will are typed `Array`, `Dictionary` and `Optional`, for any decodable type.
 
@@ -16,11 +16,11 @@ import SwiftSyntaxMacros
     - `@FallbackDecoding` will add a fallback value for the decoding process that will be used if decoding/retries fail
     - `@RetryDecoding` adds retries, where decoding will be performed for the specified type and then mapped to the property's type, if possible
  */
-public enum SafeDecodingMacro {}
+public enum ClassOrStructSafeDecodingMacro {}
 
 // MARK: - ExtensionMacro
 
-extension SafeDecodingMacro: ExtensionMacro {
+extension ClassOrStructSafeDecodingMacro: ExtensionMacro {
     public static func expansion(
         of node: SwiftSyntax.AttributeSyntax,
         attachedTo declaration: some DeclGroupSyntax,
@@ -36,14 +36,14 @@ extension SafeDecodingMacro: ExtensionMacro {
             memberBlock = classDecl.memberBlock
         } else {
             context.addDiagnostics(
-                from: SafeDecodingMacro.Errors.onlyApplicableToStructOrClassTypes,
+                from: ClassOrStructSafeDecodingMacro.Errors.onlyApplicableToStructOrClassTypes,
                 node: node
             )
 
             return []
         }
 
-        let accessModifier = if let accessControl = Self.accessControl(decl: declaration) {
+        let accessModifier = if let accessControl = SyntaxUtils.accessControl(decl: declaration) {
             accessControl.rawValue + " "
         } else {
             ""
@@ -88,7 +88,7 @@ extension SafeDecodingMacro: ExtensionMacro {
                             fallback: nil
                         )
                     }
-                    else if let optionalElementType = extractOptionalType(from: propertyType) {
+                    else if let optionalElementType = SyntaxUtils.extractOptionalType(from: propertyType) {
                         optionalDecoderSyntax(
                             for: pattern,
                             elementType: optionalElementType,
@@ -97,21 +97,21 @@ extension SafeDecodingMacro: ExtensionMacro {
                             with: retries,
                             fallback: fallback
                         )
-                    } else if let arrayElementType = extractArrayType(from: propertyType) {
+                    } else if let arrayElementType = SyntaxUtils.extractArrayType(from: propertyType) {
                         arrayDecoderSyntax(
                             for: pattern,
                             elementType: arrayElementType,
                             reporter: reporter,
                             container: type
                         )
-                    } else if let setElementType = extractSetType(from: propertyType) {
+                    } else if let setElementType = SyntaxUtils.extractSetType(from: propertyType) {
                         setDecoderSyntax(
                             for: pattern,
                             elementType: setElementType,
                             reporter: reporter,
                             container: type
                         )
-                    } else if let (keyType, valueType) = extractDictionayTypes(from: propertyType) {
+                    } else if let (keyType, valueType) = SyntaxUtils.extractDictionayTypes(from: propertyType) {
                         dictionaryDecoderSyntax(
                             for: pattern,
                             keyType: keyType,
@@ -146,7 +146,7 @@ extension SafeDecodingMacro: ExtensionMacro {
         }
 
         let extensionDecl = try ExtensionDeclSyntax(
-            isMissingConformanceToDecodable(conformances: protocols) ?
+            SyntaxUtils.isMissingConformanceToDecodable(conformances: protocols) ?
                 "extension \(type): Decodable" :
                 "extension \(type)"
         ) {
@@ -162,36 +162,7 @@ extension SafeDecodingMacro: ExtensionMacro {
 
 // MARK: - Utils
 
-private extension SafeDecodingMacro {
-    struct Retry {
-        let type: SyntaxProtocol
-        let mapper: SyntaxProtocol
-
-        init(
-            type: SyntaxProtocol,
-            mapper: SyntaxProtocol
-        ) {
-            self.type = type
-            self.mapper = mapper
-        }
-
-        init?(from syntax: SyntaxProtocol) {
-            guard
-                let attribute = syntax.as(AttributeSyntax.self),
-                attribute.attributeName.as(IdentifierTypeSyntax.self)?.name.text == "RetryDecoding",
-                let arguments = attribute.arguments?.as(LabeledExprListSyntax.self),
-                arguments.count == 2,
-                let type = arguments.first?.as(LabeledExprSyntax.self)?.expression,
-                let mapper = arguments.last?.as(LabeledExprSyntax.self)?.expression
-            else {
-                return nil
-            }
-
-            self.type = type
-            self.mapper = mapper
-        }
-    }
-
+private extension ClassOrStructSafeDecodingMacro {
     static func retries(for declaration: VariableDeclSyntax) -> [Retry] {
         declaration
             .attributes
@@ -199,7 +170,7 @@ private extension SafeDecodingMacro {
     }
 }
 
-private extension SafeDecodingMacro {
+private extension ClassOrStructSafeDecodingMacro {
     static func fallback(for declaration: VariableDeclSyntax) -> SyntaxProtocol? {
         let fallbacks = declaration
             .attributes
@@ -218,27 +189,7 @@ private extension SafeDecodingMacro {
     }
 }
 
-private extension SafeDecodingMacro {
-    enum AccessControl: String {
-        case `open`
-        case `public`
-        case `package`
-        case `internal`
-        case `private`
-    }
-
-    static func accessControl(decl: DeclGroupSyntax) -> AccessControl? {
-        decl
-            .modifiers
-            .compactMap {
-                $0.as(DeclModifierSyntax.self)
-                    .flatMap {
-                        AccessControl(rawValue: $0.name.text)
-                    }
-            }
-            .first
-    }
-
+private extension ClassOrStructSafeDecodingMacro {
     static func shouldIgnore(property decl: VariableDeclSyntax) -> Bool {
         [
             decl
@@ -263,13 +214,9 @@ private extension SafeDecodingMacro {
                 }.any
         ].any
     }
-
-    static func isMissingConformanceToDecodable(conformances protocols: [TypeSyntax]) -> Bool {
-        protocols.first { $0.as(IdentifierTypeSyntax.self)?.name.text == "Decodable" } != nil
-    }
 }
 
-private extension SafeDecodingMacro {
+private extension ClassOrStructSafeDecodingMacro {
     static func standardDecoderSyntax(
         for pattern: IdentifierPatternSyntax,
         of type: TypeSyntax,
@@ -459,23 +406,10 @@ private extension SafeDecodingMacro {
     }
 }
 
-private extension SafeDecodingMacro {
-    static func extractOptionalType(
-        from type: TypeSyntax
-    ) -> IdentifierTypeSyntax? {
-        if let optional = type.as(OptionalTypeSyntax.self) {
-            return optional.wrappedType.as(IdentifierTypeSyntax.self)
-        }
-
-        return extractSingleGeneric(
-            named: "Optional",
-            from: type
-        )
-    }
-
+private extension ClassOrStructSafeDecodingMacro {
     static func optionalDecoderSyntax(
         for pattern: IdentifierPatternSyntax,
-        elementType: IdentifierTypeSyntax,
+        elementType: TypeSyntax,
         reporter: ExprSyntax?,
         container: TypeSyntaxProtocol,
         with retries: [Retry],
@@ -502,7 +436,7 @@ private extension SafeDecodingMacro {
 
     static func optionalDecoderSyntaxNoReporting(
         for pattern: IdentifierPatternSyntax,
-        elementType: IdentifierTypeSyntax,
+        elementType: TypeSyntax,
         container: TypeSyntaxProtocol,
         with retries: [Retry],
         fallback: SyntaxProtocol?
@@ -527,7 +461,7 @@ private extension SafeDecodingMacro {
 
     static func optionalDecoderSyntaxWithReporting(
         for pattern: IdentifierPatternSyntax,
-        elementType: IdentifierTypeSyntax,
+        elementType: TypeSyntax,
         reporter: ExprSyntax,
         container: TypeSyntaxProtocol,
         with retries: [Retry],
@@ -555,7 +489,7 @@ private extension SafeDecodingMacro {
 
     static func optionalDecoderSyntaxNoReportingNoFallback(
         for pattern: IdentifierPatternSyntax,
-        of type: IdentifierTypeSyntax,
+        of type: TypeSyntax,
         container: TypeSyntaxProtocol,
         with retries: [Retry]
     ) -> CodeBlockItemSyntax {
@@ -566,7 +500,7 @@ private extension SafeDecodingMacro {
 
     static func optionalDecoderSyntaxNoReportingWithFallback(
         for pattern: IdentifierPatternSyntax,
-        of type: IdentifierTypeSyntax,
+        of type: TypeSyntax,
         container: TypeSyntaxProtocol,
         with retries: [Retry],
         fallback: SyntaxProtocol
@@ -578,7 +512,7 @@ private extension SafeDecodingMacro {
 
     static func optionalDecoderSyntaxWithReportingNoFallback(
         for pattern: IdentifierPatternSyntax,
-        of type: IdentifierTypeSyntax,
+        of type: TypeSyntax,
         reporter: ExprSyntax,
         container: TypeSyntaxProtocol,
         with retries: [Retry]
@@ -595,7 +529,7 @@ private extension SafeDecodingMacro {
 
     static func optionalDecoderSyntaxWithReportingWithFallback(
         for pattern: IdentifierPatternSyntax,
-        of type: IdentifierTypeSyntax,
+        of type: TypeSyntax,
         reporter: ExprSyntax,
         container: TypeSyntaxProtocol,
         with retries: [Retry],
@@ -612,23 +546,10 @@ private extension SafeDecodingMacro {
     }
 }
 
-private extension SafeDecodingMacro {
-    static func extractArrayType(
-        from type: TypeSyntax
-    ) -> IdentifierTypeSyntax? {
-        if let array = type.as(ArrayTypeSyntax.self) {
-            return array.element.as(IdentifierTypeSyntax.self)
-        }
-
-        return extractSingleGeneric(
-            named: "Array",
-            from: type
-        )
-    }
-
+private extension ClassOrStructSafeDecodingMacro {
     static func arrayDecoderSyntax(
         for pattern: IdentifierPatternSyntax,
-        elementType: IdentifierTypeSyntax,
+        elementType: TypeSyntax,
         reporter: ExprSyntax?,
         container: TypeSyntaxProtocol
     ) -> CodeBlockItemSyntax {
@@ -660,19 +581,10 @@ private extension SafeDecodingMacro {
     }
 }
 
-private extension SafeDecodingMacro {
-    static func extractSetType(
-        from type: TypeSyntax
-    ) -> IdentifierTypeSyntax? {
-        return extractSingleGeneric(
-            named: "Set",
-            from: type
-        )
-    }
-
+private extension ClassOrStructSafeDecodingMacro {
     static func setDecoderSyntax(
         for pattern: IdentifierPatternSyntax,
-        elementType: IdentifierTypeSyntax,
+        elementType: TypeSyntax,
         reporter: ExprSyntax?,
         container: TypeSyntaxProtocol
     ) -> CodeBlockItemSyntax {
@@ -682,11 +594,11 @@ private extension SafeDecodingMacro {
                 let decodedItems = try container.decode([SafeDecodable<\(elementType)>].self, forKey: .\(pattern.identifier))
                 var items: Set<\(elementType)> = []
 
-                for item in decodedItems {
+                for (index, item) in decodedItems.enumerated() {
                     if let decoded = item.decoded {
                         items.insert(decoded)
                     } else if let error = item.error {
-                        \(reporter).report(error: error, decoding: \(elementType).self, of: "\(raw: pattern.identifier.description)", in: (\(container)).self)
+                        \(reporter).report(error: error, decoding: \(elementType).self, at: index, of: "\(raw: pattern.identifier.description)", in: (\(container)).self)
                     }
                 }
 
@@ -704,35 +616,11 @@ private extension SafeDecodingMacro {
     }
 }
 
-private extension SafeDecodingMacro {
-    static func extractDictionayTypes(
-        from type: TypeSyntax
-    ) -> (keyType: IdentifierTypeSyntax, valueType: IdentifierTypeSyntax)? {
-        if
-            let dictionary = type.as(DictionaryTypeSyntax.self),
-            let keyType = dictionary.key.as(IdentifierTypeSyntax.self),
-            let valueType = dictionary.value.as(IdentifierTypeSyntax.self)
-        {
-            return (keyType, valueType)
-        }
-
-        if
-            let type = type.as(IdentifierTypeSyntax.self),
-            type.name.text == "Dictionary",
-            type.genericArgumentClause?.arguments.count == 2,
-            let keyType = type.genericArgumentClause?.arguments.first?.argument.as(IdentifierTypeSyntax.self),
-            let valueType = type.genericArgumentClause?.arguments.last?.argument.as(IdentifierTypeSyntax.self)
-        {
-            return (keyType, valueType)
-        }
-
-        return nil
-    }
-
+private extension ClassOrStructSafeDecodingMacro {
     static func dictionaryDecoderSyntax(
         for pattern: IdentifierPatternSyntax,
-        keyType: IdentifierTypeSyntax,
-        valueType: IdentifierTypeSyntax,
+        keyType: TypeSyntax,
+        valueType: TypeSyntax,
         reporter: ExprSyntax?,
         container: TypeSyntaxProtocol
     ) -> CodeBlockItemSyntax {
@@ -764,32 +652,15 @@ private extension SafeDecodingMacro {
     }
 }
 
-extension SafeDecodingMacro {
-    static func extractSingleGeneric(
-        named genericTypeName: String,
-        from type: TypeSyntax
-    ) -> IdentifierTypeSyntax? {
-        if
-            let type = type.as(IdentifierTypeSyntax.self),
-            type.name.text == genericTypeName,
-            type.genericArgumentClause?.arguments.count == 1
-        {
-            return type.genericArgumentClause?.arguments.first?.argument.as(IdentifierTypeSyntax.self)
-        }
-
-        return nil
-    }
-}
-
 // MARK: - Errors
 
-extension SafeDecodingMacro {
+extension ClassOrStructSafeDecodingMacro {
     enum Errors: Error, CustomStringConvertible {
         case onlyApplicableToStructOrClassTypes
 
         var description: String {
             switch self {
-            case .onlyApplicableToStructOrClassTypes: "SafeDecodingMacro is only applicable to structs or classes"
+            case .onlyApplicableToStructOrClassTypes: "ClassOrStructSafeDecodingMacro is only applicable to structs or classes"
             }
         }
     }

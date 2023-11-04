@@ -7,21 +7,23 @@ import XCTest
 #if canImport(SafeDecodingMacros)
 import SafeDecodingMacros
 
-let testMacros: [String: Macro.Type] = [
-    "SafeDecoding": SafeDecodingMacro.self,
+private let testMacros: [String: Macro.Type] = [
+    "ClassOrStructSafeDecoding": ClassOrStructSafeDecodingMacro.self,
     "RetryDecoding": RetryDecodingMacro.self,
     "FallbackDecoding": FallbackDecodingMacro.self
 ]
 #endif
 
-final class SafeDecodingTests: XCTestCase { }
+final class ClassOrStructSafeDecodingMacrosTests: XCTestCase { }
 
-extension SafeDecodingTests {
+// MARK: - class/struct -
+
+extension ClassOrStructSafeDecodingMacrosTests {
     func testSafeDecodingOfOptional() throws {
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
-                @SafeDecoding
+                @ClassOrStructSafeDecoding
                 struct Model {
                     let optional: Int?
                     let optionalGeneric: Optional<Int>
@@ -58,7 +60,7 @@ extension SafeDecodingTests {
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
-                @SafeDecoding
+                @ClassOrStructSafeDecoding
                 struct Model {
                     let set: Set<Int>
                 }
@@ -95,7 +97,7 @@ extension SafeDecodingTests {
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
-                @SafeDecoding
+                @ClassOrStructSafeDecoding
                 struct Model {
                     let array: [Int]
                     let arrayGeneric: Array<Int>
@@ -136,7 +138,7 @@ extension SafeDecodingTests {
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
-                @SafeDecoding
+                @ClassOrStructSafeDecoding
                 struct Model {
                     let dictionary: [Int: Int]
                     let dictionaryGeneric: Dictionary<Int, Int>
@@ -175,12 +177,12 @@ extension SafeDecodingTests {
     }
 }
 
-extension SafeDecodingTests {
+extension ClassOrStructSafeDecodingMacrosTests {
     func testSafeDecodingOfOptionalWithReporter() throws {
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
-                @SafeDecoding(reporter: reporter)
+                @ClassOrStructSafeDecoding(reporter: reporter)
                 struct Model {
                     let optional: Int?
                     let optionalGeneric: Optional<Int>
@@ -227,7 +229,7 @@ extension SafeDecodingTests {
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
-                @SafeDecoding(reporter: reporter)
+                @ClassOrStructSafeDecoding(reporter: reporter)
                 struct Model {
                     let set: Set<Int>
                 }
@@ -249,11 +251,11 @@ extension SafeDecodingTests {
                             let decodedItems = try container.decode([SafeDecodable<Int>].self, forKey: .set)
                             var items: Set<Int> = []
 
-                            for item in decodedItems {
+                            for (index, item) in decodedItems.enumerated() {
                                 if let decoded = item.decoded {
                                     items.insert(decoded)
                                 } else if let error = item.error {
-                                    reporter.report(error: error, decoding: Int.self, of: "set", in: (Model).self)
+                                    reporter.report(error: error, decoding: Int.self, at: index, of: "set", in: (Model).self)
                                 }
                             }
 
@@ -276,7 +278,7 @@ extension SafeDecodingTests {
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
-                @SafeDecoding(reporter: reporter)
+                @ClassOrStructSafeDecoding(reporter: reporter)
                 struct Model {
                     let array: [Int]
                     let arrayGeneric: Array<Int>
@@ -345,7 +347,7 @@ extension SafeDecodingTests {
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
-                @SafeDecoding(reporter: reporter)
+                @ClassOrStructSafeDecoding(reporter: reporter)
                 struct Model {
                     let dictionary: [Int: Int]
                     let dictionaryGeneric: Dictionary<Int, Int>
@@ -412,12 +414,12 @@ extension SafeDecodingTests {
     }
 }
 
-extension SafeDecodingTests {
+extension ClassOrStructSafeDecodingMacrosTests {
     func testSafeDecodingIgnoresComputedProperty() throws {
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
-                @SafeDecoding(reporter: SafeDecodingErrorReporter.shared)
+                @ClassOrStructSafeDecoding(reporter: SafeDecodingErrorReporter.shared)
                 struct Model {
                     let computed: Int { 0 }
                 }
@@ -449,7 +451,7 @@ extension SafeDecodingTests {
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
-                @SafeDecoding
+                @ClassOrStructSafeDecoding
                 struct Model {
                     let computed: Int = 0
                 }
@@ -479,12 +481,12 @@ extension SafeDecodingTests {
     }
 }
 
-extension SafeDecodingTests {
+extension ClassOrStructSafeDecodingMacrosTests {
     func testSafeDecodingMacroRespectsDefaultAccessModifier() throws {
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
-                @SafeDecoding
+                @ClassOrStructSafeDecoding
                 struct Model {
                     let computed: Int = 0
                 }
@@ -514,7 +516,7 @@ extension SafeDecodingTests {
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
-                @SafeDecoding
+                @ClassOrStructSafeDecoding
                 internal struct Model {
                     let computed: Int = 0
                 }
@@ -544,7 +546,7 @@ extension SafeDecodingTests {
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
-                @SafeDecoding
+                @ClassOrStructSafeDecoding
                 package struct Model {
                     let computed: Int = 0
                 }
@@ -574,7 +576,7 @@ extension SafeDecodingTests {
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
-                @SafeDecoding
+                @ClassOrStructSafeDecoding
                 public struct Model {
                     let computed: Int = 0
                 }
@@ -604,7 +606,7 @@ extension SafeDecodingTests {
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
-                @SafeDecoding
+                @ClassOrStructSafeDecoding
                 open struct Model {
                     let computed: Int = 0
                 }
@@ -631,12 +633,12 @@ extension SafeDecodingTests {
     }
 }
 
-extension SafeDecodingTests {
+extension ClassOrStructSafeDecodingMacrosTests {
     func testSafeDecodingRetryDecoding() throws {
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
-                @SafeDecoding(reporter: SafeDecodingErrorReporter.shared)
+                @ClassOrStructSafeDecoding(reporter: SafeDecodingErrorReporter.shared)
                 struct Model {
                     @RetryDecoding(String.self, map: { Int.init($0, radix: 10) })
                     let int: Int
@@ -685,7 +687,7 @@ extension SafeDecodingTests {
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
-                @SafeDecoding(reporter: SafeDecodingErrorReporter.shared)
+                @ClassOrStructSafeDecoding(reporter: SafeDecodingErrorReporter.shared)
                 struct Model {
                     @FallbackDecoding(Int.random(in: 0 ..< 1000))
                     let int: Int
@@ -725,12 +727,12 @@ extension SafeDecodingTests {
     }
 }
 
-extension SafeDecodingTests {
+extension ClassOrStructSafeDecodingMacrosTests {
     func testMacro() throws {
         #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
             """
-            @SafeDecoding
+            @ClassOrStructSafeDecoding
             public struct Custom {
                 let integer: Int { willSet { print("==> willSet") } didSet { print("==> didSet") } }
                 let optional: Int?
