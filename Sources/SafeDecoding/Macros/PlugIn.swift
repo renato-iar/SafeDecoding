@@ -6,9 +6,11 @@ import SwiftSyntaxMacros
 @main
 struct SafeDecodingPlugin: CompilerPlugin {
     let providingMacros: [Macro.Type] = [
-        SafeDecodingMacro.self,
+        ClassOrStructSafeDecodingMacro.self,
+        EnumSafeDecodingMacro.self,
         IgnoreSafeDecodingMacro.self,
         RetryDecodingMacro.self,
-        FallbackDecodingMacro.self
+        FallbackDecodingMacro.self,
+        CaseNameDecodingMacro.self
     ]
 }

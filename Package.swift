@@ -7,7 +7,7 @@ import CompilerPluginSupport
 var package = Package(
     name: "SafeDecoding",
     platforms: [
-        .macOS(.v10_15),
+        .macOS(.v13),
         .iOS(.v13),
         .tvOS(.v13),
         .watchOS(.v6),
@@ -57,9 +57,20 @@ package.targets.append(contentsOf: [
     ),
 
     .testTarget(
-        name: "SafeDecodingTests",
+        name: "SafeDecodingMacrosTests",
         dependencies: [
             "SafeDecodingMacros",
+            .product(
+                name: "SwiftSyntaxMacrosTestSupport",
+                package: "swift-syntax"
+            )
+        ]
+    ),
+
+    .testTarget(
+        name: "SafeDecodingTests",
+        dependencies: [
+            "SafeDecoding",
             .product(
                 name: "SwiftSyntaxMacrosTestSupport",
                 package: "swift-syntax"

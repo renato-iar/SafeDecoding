@@ -11,5 +11,18 @@ import Foundation
 )
 public macro SafeDecoding(reporter: SafeDecodingReporter? = nil) = #externalMacro(
     module: "SafeDecodingMacros",
-    type: "SafeDecodingMacro"
+    type: "ClassOrStructSafeDecodingMacro"
+)
+
+@attached(
+    extension,
+    conformances: Decodable,
+    names: arbitrary
+)
+public macro SafeDecoding(
+    decodingStrategy: EnumCaseDecodingStrategy,
+    reporter: SafeDecodingReporter? = nil
+) = #externalMacro(
+    module: "SafeDecodingMacros",
+    type: "EnumSafeDecodingMacro"
 )
