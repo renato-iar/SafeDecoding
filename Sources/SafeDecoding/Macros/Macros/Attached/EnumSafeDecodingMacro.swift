@@ -53,9 +53,9 @@ extension EnumSafeDecodingMacro: ExtensionMacro {
         }
         let reporter = node.arguments?.as(LabeledExprListSyntax.self)?.first { $0.label?.text == "reporter" }?.expression
 
-        return try switch decodingStrategy(for: node) {
+        return switch decodingStrategy(for: node) {
         case .nested:
-            decodeNestedObject(
+            try decodeNestedObject(
                 providingExtensionsOf: type,
                 for: enumDecl,
                 cases: cases,
@@ -66,7 +66,7 @@ extension EnumSafeDecodingMacro: ExtensionMacro {
             )
 
         case let .property(name: name):
-            decodeObjectByProperty(
+            try decodeObjectByProperty(
                 providingExtensionsOf: type,
                 casingPropertyName: name,
                 for: enumDecl,
@@ -312,7 +312,7 @@ private extension EnumSafeDecodingMacro {
 
             MemberBlockItemListSyntax(
                 """
-                init(from decoder: Decoder) throws {
+                \(raw: accessModifier)init(from decoder: Decoder) throws {
                     switch try decoder.container(keyedBy: \(raw: rootCodingKeysName).self).decode(CasingKeys.self, forKey: .\(raw: plainCasingPropertyName)) {
                     \(raw: cases.map(caseDecoding(for:)).flatMap { $0 }.joined(separator: "\n"))
                     }
