@@ -250,9 +250,30 @@ extension ClassOrStructSafeDecodingTests {
         XCTAssertEqual(interceptor.didCallReportErrorForItemOfPropertyNameInContainer, [])
         XCTAssertTrue(interceptor.didCallReportErrorForItemAtIndexOfPropertyNameInContainer.isEmpty)
         XCTAssertEqual(interceptor.didCallReportErrorForItemWithKeyOrPropertyNameInContainer.count, 2)
-        XCTAssertEqual(interceptor.didCallReportErrorForItemWithKeyOrPropertyNameInContainer.first?.key, "item-1")
-        XCTAssertEqual(interceptor.didCallReportErrorForItemWithKeyOrPropertyNameInContainer.first?.propertyName, "stringToIntDictionary")
-        XCTAssertEqual(interceptor.didCallReportErrorForItemWithKeyOrPropertyNameInContainer.last?.key, "item-3")
-        XCTAssertEqual(interceptor.didCallReportErrorForItemWithKeyOrPropertyNameInContainer.last?.propertyName, "stringToIntDictionary")
+        XCTAssertTrue(interceptor.didCallReportErrorForItemWithKeyOrPropertyNameInContainer.contains { $0.key == "item-1" && $0.propertyName == "stringToIntDictionary" })
+        XCTAssertTrue(interceptor.didCallReportErrorForItemWithKeyOrPropertyNameInContainer.contains { $0.key == "item-3" && $0.propertyName == "stringToIntDictionary" })
+    }
+}
+
+extension ClassOrStructSafeDecodingTests {
+    func testEncoding() throws {
+        let input = """
+                    {
+                        "optionalInteger": 0,
+                        "integerArray": [1],
+                        "integerSet": [1],
+                        "stringToIntDictionary": {
+                            "item-0": 0,
+                            "item-1": true,
+                            "item-2": 2,
+                            "item-3": "error"
+                        }
+                    }
+                    """
+        let model = try XCTUnwrap(DecodingUtils.decode(TestModel.self, input: input))
+        let data = try JSONEncoder().encode(model)
+        let modelCopy = try JSONDecoder().decode(TestModel.self, from: data)
+
+        XCTAssertEqual(model, modelCopy)
     }
 }

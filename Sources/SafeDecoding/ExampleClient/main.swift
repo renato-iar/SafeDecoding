@@ -132,7 +132,11 @@ testDecoding(
             """
 )
 
-@SafeDecoding(decodingStrategy: .caseByNestedObject, reporter: SafeDecodingErrorReporter.shared)
+@SafeDecoding(
+    decodingStrategy: .caseByNestedObject,
+    shouldImplementEncoding: true,
+    reporter: SafeDecodingErrorReporter.shared
+)
 enum MediaAssetNested {
     @CaseNameDecoding("ASSET/PROGRAMME")
     case vod(String?, String)

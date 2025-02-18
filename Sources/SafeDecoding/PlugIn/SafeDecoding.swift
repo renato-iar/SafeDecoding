@@ -9,7 +9,10 @@ import Foundation
         named(Decodable),
         named(init(from:))
 )
-public macro SafeDecoding(reporter: SafeDecodingReporter? = nil) = #externalMacro(
+public macro SafeDecoding(
+    reporter: SafeDecodingReporter? = nil,
+    shouldImplementEncoding: Bool = false
+) = #externalMacro(
     module: "SafeDecodingMacros",
     type: "ClassOrStructSafeDecodingMacro"
 )
@@ -21,6 +24,7 @@ public macro SafeDecoding(reporter: SafeDecodingReporter? = nil) = #externalMacr
 )
 public macro SafeDecoding(
     decodingStrategy: EnumCaseDecodingStrategy,
+    shouldImplementEncoding: Bool = false,
     reporter: SafeDecodingReporter? = nil
 ) = #externalMacro(
     module: "SafeDecodingMacros",
