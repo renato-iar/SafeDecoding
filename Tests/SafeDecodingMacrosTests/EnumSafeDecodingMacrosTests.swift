@@ -40,6 +40,10 @@ extension EnumSafeDecodingMacrosTests {
                         case empty1
                         case empty2
                     }
+                    private enum CodingKeys_empty1: CodingKey {
+                    }
+                    private enum CodingKeys_empty2: CodingKey {
+                    }
                     init(from decoder: Decoder) throws {
                         let container = try decoder.container(keyedBy: CodingKeys.self)
                         var allKeys = ArraySlice(container.allKeys)

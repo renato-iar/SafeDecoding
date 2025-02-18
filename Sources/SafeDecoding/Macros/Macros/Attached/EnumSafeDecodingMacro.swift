@@ -53,9 +53,10 @@ extension EnumSafeDecodingMacro: ExtensionMacro {
         }
         let reporter = node.arguments?.as(LabeledExprListSyntax.self)?.first { $0.label?.text == "reporter" }?.expression
 
-        return switch decodingStrategy(for: node) {
+        let shouldImplementEncoding = shouldImplementEncoding(for: node)
+        switch decodingStrategy(for: node) {
         case .nested:
-            try decodeNestedObject(
+            let decoders = try decodeNestedObject(
                 providingExtensionsOf: type,
                 for: enumDecl,
                 cases: cases,
@@ -65,8 +66,22 @@ extension EnumSafeDecodingMacro: ExtensionMacro {
                 reporter: reporter
             )
 
+            if shouldImplementEncoding {
+                let encoder = try encodeNestedObject(
+                    providingExtensionsOf: type,
+                    for: enumDecl,
+                    cases: cases,
+                    accessModifier: accessModifier,
+                    context: context
+                )
+
+                return decoders + [encoder]
+            } else {
+                return decoders
+            }
+
         case let .property(name: name):
-            try decodeObjectByProperty(
+            let decoders = try decodeObjectByProperty(
                 providingExtensionsOf: type,
                 casingPropertyName: name,
                 for: enumDecl,
@@ -76,6 +91,21 @@ extension EnumSafeDecodingMacro: ExtensionMacro {
                 context: context,
                 reporter: reporter
             )
+
+            if shouldImplementEncoding {
+                let encoder = try encodeObjectByProperty(
+                    providingExtensionsOf: type,
+                    casingPropertyName: name,
+                    for: enumDecl,
+                    cases: cases,
+                    accessModifier: accessModifier,
+                    context: context
+                )
+
+                return decoders + [encoder]
+            } else {
+                return decoders
+            }
         }
     }
 }
@@ -84,6 +114,9 @@ extension EnumSafeDecodingMacro: ExtensionMacro {
 // MARK: - Decoding
 
 private extension EnumSafeDecodingMacro {
+
+    // MARK: Decoders
+
     static func decodeNestedObject(
         providingExtensionsOf type: some TypeSyntaxProtocol,
         for enum: EnumDeclSyntax,
@@ -109,6 +142,7 @@ private extension EnumSafeDecodingMacro {
                 "case \(caseName)"
             }
         }
+
         func caseDecoding(for `case`: EnumCaseDeclSyntax) -> [String] {
             `case`
                 .elements
@@ -128,33 +162,34 @@ private extension EnumSafeDecodingMacro {
                 "extension \(type)"
         ) {
             // Root coding keys
-            MemberBlockItemListSyntax(
-                """
-                private enum \(raw: rootCodingKeysName): String, CodingKey {
-                    \(raw: cases.compactMap(rootCodingKeysCase(for:)).joined(separator: "\n"))
+            try EnumDeclSyntax("private enum \(raw: rootCodingKeysName): String, CodingKey") {
+                for rootCodingKeysCase in cases.compactMap(rootCodingKeysCase(for:)) {
+                    try EnumCaseDeclSyntax("\(raw: rootCodingKeysCase)")
                 }
-                """
-            )
+            }
 
             // Nested coding keys
             for `case` in cases {
-                for element in `case`.elements where element.parameterClause?.parameters.isEmpty == false {
+                for element in `case`.elements {
+                    let elementName = element.name.text
+
                     if
                         let parameters = element
                             .parameterClause?
                             .parameters
                             .map({
                                 $0.as(EnumCaseParameterSyntax.self)
-                            }),
-                        !parameters.isEmpty
+                            })
                     {
-                        MemberBlockItemListSyntax(
-                            """
-                            private enum \(raw: rootCodingKeysName)_\(raw: element.name.text): String, CodingKey {
-                                \(raw: parameters.enumerated().map { index, parameter in "case " + (parameter?.firstName?.text ?? "_\(index)") }.joined(separator: "\n"))
+                        try EnumDeclSyntax("private enum \(raw: rootCodingKeysName)_\(raw: elementName): String, CodingKey") {
+                            for (index, parameter) in parameters.enumerated() {
+                                let parameterName = parameter?.firstName?.text ?? "_\(index)"
+                                try EnumCaseDeclSyntax("case \(raw: parameterName)")
                             }
-                            """
-                        )
+                        }
+                    } else {
+                        try EnumDeclSyntax("private enum \(raw: rootCodingKeysName)_\(raw: elementName): CodingKey") {
+                        }
                     }
                 }
             }
@@ -250,21 +285,15 @@ private extension EnumSafeDecodingMacro {
                 "extension \(type)"
         ) {
             // Decision enum
-            MemberBlockItemListSyntax(
-                """
-                private enum CasingKeys: String, Decodable {
-                    \(raw: cases.compactMap(rootCodingKeysCase(for:)).joined(separator: "\n"))
+            try EnumDeclSyntax("private enum CasingKeys: String, Decodable") {
+                for rootCodingKeysCase in cases.compactMap(rootCodingKeysCase(for:)) {
+                    try EnumCaseDeclSyntax("\(raw: rootCodingKeysCase)")
                 }
-                """
-            )
+            }
 
-            MemberBlockItemListSyntax(
-                """
-                private enum \(raw: rootCodingKeysName): String, CodingKey {
-                    case \(raw: plainCasingPropertyName) = "\(raw: casingPropertyName)"
-                }
-                """
-            )
+            try EnumDeclSyntax("private enum \(raw: rootCodingKeysName): String, CodingKey") {
+                try EnumCaseDeclSyntax("case \(raw: plainCasingPropertyName) = \"\(raw: casingPropertyName)\"")
+            }
 
             // Nested coding keys
             for `case` in cases {
@@ -273,18 +302,13 @@ private extension EnumSafeDecodingMacro {
                         let parameters = element
                             .parameterClause?
                             .parameters
-                            .map({
-                                $0.as(EnumCaseParameterSyntax.self)
-                            }),
-                        !parameters.isEmpty
+                            .map({ $0.as(EnumCaseParameterSyntax.self) })
                     {
-                        MemberBlockItemListSyntax(
-                            """
-                            private enum \(raw: rootCodingKeysName)_\(raw: element.name.text): String, CodingKey {
-                                \(raw: parameters.enumerated().map { index, parameter in "case " + (parameter?.firstName?.text ?? "_\(index)") }.joined(separator: "\n"))
+                        try EnumDeclSyntax("private enum \(raw: rootCodingKeysName)_\(raw: element.name.text): String, CodingKey") {
+                            for (index, parameter) in parameters.enumerated() {
+                                try EnumCaseDeclSyntax("case \(raw: parameter?.firstName?.text ?? "_\(index)")")
                             }
-                            """
-                        )
+                        }
                     }
                 }
             }
@@ -364,7 +388,118 @@ private extension EnumSafeDecodingMacro {
             )
         }
     }
+
+    // MARK: Encoders
+
+    static func encodeNestedObject(
+        providingExtensionsOf type: some TypeSyntaxProtocol,
+        for enum: EnumDeclSyntax,
+        cases: [EnumCaseDeclSyntax],
+        accessModifier: String,
+        context: some MacroExpansionContext
+    ) throws -> ExtensionDeclSyntax {
+        let rootCodingKeysName = "CodingKeys"
+
+        return try ExtensionDeclSyntax("extension \(type)") {
+            try FunctionDeclSyntax("\(raw: accessModifier)func encode(to encoder: Encoder) throws") {
+                CodeBlockItemListSyntax(
+                    """
+                    var container = encoder.container(keyedBy: \(raw: rootCodingKeysName).self)
+                    """
+                )
+
+                try SwitchExprSyntax("switch self") {
+                    for `case`in cases {
+                        for element in `case`.elements {
+                            let elementName = element.name.text
+                            let elementCodingKeysName = "\(rootCodingKeysName)_\(elementName)"
+
+                            if
+                                let parameters = element.parameterClause?.parameters,
+                                !parameters.isEmpty
+                            {
+                                let parameterNames = parameters.enumerated().map { index, parameter in parameter.firstName?.text ?? "_\(index)"  }
+
+                                SwitchCaseSyntax("case let .\(raw: elementName)(\(raw: parameterNames.joined(separator: ", "))):") {
+                                    CodeBlockItemSyntax(
+                                        """
+                                        var nestedContainer = container.nestedContainer(keyedBy: \(raw: elementCodingKeysName).self, forKey: .\(raw: elementName))
+                                        """
+                                    )
+
+                                    for parameterName in parameterNames {
+                                        CodeBlockItemSyntax(
+                                            """
+                                            try nestedContainer.encode(\(raw: parameterName), forKey: \(raw: elementCodingKeysName).\(raw: parameterName))
+                                            """
+                                        )
+                                    }
+                                }
+                            } else {
+                                SwitchCaseSyntax("case .\(raw: elementName):") {
+                                    CodeBlockItemSyntax(
+                                        """
+                                        _ = container.nestedContainer(keyedBy: \(raw: elementCodingKeysName).self, forKey: .\(raw: elementName))
+                                        """
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    static func encodeObjectByProperty(
+        providingExtensionsOf type: some TypeSyntaxProtocol,
+        casingPropertyName: String,
+        for enum: EnumDeclSyntax,
+        cases: [EnumCaseDeclSyntax],
+        accessModifier: String,
+        context: some MacroExpansionContext
+    ) throws -> ExtensionDeclSyntax {
+        let rootCodingKeysName = "CodingKeys"
+        let casingKeysName = "CasingKeys"
+
+        return try ExtensionDeclSyntax("extension \(type)") {
+            try FunctionDeclSyntax("\(raw: accessModifier)func encode(to encoder: Encoder) throws") {
+                try SwitchExprSyntax("switch self") {
+                    for `case` in cases {
+                        for element in `case`.elements {
+                            let elementName = element.name.text
+                            let elementCodingKeysName = "\(rootCodingKeysName)_\(elementName)"
+
+                            if
+                                let parameters = element.parameterClause?.parameters,
+                                !parameters.isEmpty
+                            {
+                                let parameterNames = parameters.enumerated().map { index, parameter in parameter.firstName?.text ?? "_\(index)"  }
+
+                                SwitchCaseSyntax("case let .\(raw: elementName)(\(raw: parameterNames.joined(separator: ", "))):") {
+                                    CodeBlockItemListSyntax("var baseContainer = encoder.container(keyedBy: \(raw: rootCodingKeysName).self)")
+                                    CodeBlockItemListSyntax("try baseContainer.encode(\(raw: casingKeysName).\(raw: elementName).rawValue, forKey: .\(raw: casingPropertyName))")
+                                    CodeBlockItemListSyntax("var container = encoder.container(keyedBy: \(raw: elementCodingKeysName).self)")
+
+                                    for parameterName in parameterNames {
+                                        CodeBlockItemListSyntax("try container.encode(\(raw: parameterName), forKey: .\(raw: parameterName))")
+                                    }
+                                }
+                            } else {
+                                SwitchCaseSyntax("case .\(raw: elementName):") {
+                                    CodeBlockItemListSyntax("var container = encoder.container(keyedBy: \(raw: elementCodingKeysName).self)")
+                                    CodeBlockItemListSyntax("try container.encode(\(raw: casingKeysName).\(raw: elementName).rawValue, forKey: .\(raw: casingPropertyName))")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
+
+// MARK: - Decoders -
 
 private extension EnumSafeDecodingMacro {
     static func decode(
@@ -643,6 +778,12 @@ private extension EnumSafeDecodingMacro {
     }
 }
 
+// MARK: - Encoders
+
+private extension EnumSafeDecodingMacro {
+    
+}
+
 // MARK: - Utils
 
 private extension EnumSafeDecodingMacro {
@@ -716,6 +857,58 @@ private extension EnumSafeDecodingMacro {
         }
 
         return .nested
+    }
+
+    static func shouldImplementEncoding(
+        for attribute: AttributeSyntax
+    ) -> Bool {
+        @discardableResult
+        func printt(_ item: Any) -> Bool {
+            print("===> \(item)")
+            return true
+        }
+
+        @discardableResult
+        func printt(_ message: String, arguments: Any ...) -> Bool {
+            let compoundMessage = arguments.reduce(into: message) { result, argument in
+                result += " \(argument)"
+            }
+
+            print("===> \(compoundMessage)")
+            return true
+        }
+
+        dump(attribute)
+        if let shouldImplementEncoding = attribute
+            .arguments?
+            .as(LabeledExprListSyntax.self)?
+            .compactMap({ argument -> Bool? in
+                printt(argument)
+                if
+                    let labeledExpression = argument.as(LabeledExprSyntax.self),
+                    printt("#1 labeledExpression: \(labeledExpression)"),
+                    labeledExpression.label?.text == "shouldImplementEncoding",
+                    printt("#2"),
+                    labeledExpression
+                        .expression
+                        .as(BooleanLiteralExprSyntax.self)?
+                        .literal
+                        .text == "true"
+                {
+                    printt("#4")
+                    return true
+                }
+
+                printt("#5")
+                return nil
+            }).first
+        {
+            printt("#6")
+            return shouldImplementEncoding
+        }
+
+        printt("#7")
+        return false
     }
 
     enum DecodingStrategy {
