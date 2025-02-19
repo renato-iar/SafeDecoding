@@ -487,7 +487,7 @@ private extension EnumSafeDecodingMacro {
                                 }
                             } else {
                                 SwitchCaseSyntax("case .\(raw: elementName):") {
-                                    CodeBlockItemListSyntax("var container = encoder.container(keyedBy: \(raw: elementCodingKeysName).self)")
+                                    CodeBlockItemListSyntax("var container = encoder.container(keyedBy: \(raw: rootCodingKeysName).self)")
                                     CodeBlockItemListSyntax("try container.encode(\(raw: casingKeysName).\(raw: elementName).rawValue, forKey: .\(raw: casingPropertyName))")
                                 }
                             }
