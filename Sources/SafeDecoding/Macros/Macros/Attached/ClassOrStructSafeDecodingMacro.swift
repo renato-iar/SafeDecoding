@@ -62,7 +62,7 @@ extension ClassOrStructSafeDecodingMacro: ExtensionMacro {
             }
 
         let notComputedNonInitializedTypeProperties = typeProperties.filter { !$0.0.isComputed && !$0.0.isInitialized }
-        let reporter = node.as(AttributeSyntax.self)?.arguments?.as(LabeledExprListSyntax.self)?.first?.expression
+        let reporter = node.as(AttributeSyntax.self)?.arguments?.as(LabeledExprListSyntax.self)?.first { $0.label?.text == "reporter" }?.expression
 
         let initializer = try InitializerDeclSyntax("\(raw: accessModifier)init(from decoder: Decoder) throws") {
             if !notComputedNonInitializedTypeProperties.isEmpty {
