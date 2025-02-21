@@ -145,22 +145,36 @@ extension ClassOrStructSafeDecodingMacro: ExtensionMacro {
             }
         }
 
-        let extensionDecl = try ExtensionDeclSyntax(
+        let decoderExtensionDecl = try ExtensionDeclSyntax(
             SyntaxUtils.isMissingConformanceToDecodable(conformances: protocols) ?
-                "extension \(type): Decodable" :
+            "extension \(type): Decodable" :
                 "extension \(type)"
         ) {
             codingKeys
             initializer
         }
 
-        return [
-            extensionDecl
-        ]
+        if Self.shouldImplementEncoding(for: node) {
+            let encoderExtensionDecl = try Self.encode(
+                providingExtensionsOf: type,
+                notComputedNonInitializedTypeProperties: notComputedNonInitializedTypeProperties,
+                accessModifier: accessModifier,
+                context: context
+            )
+
+            return [
+                decoderExtensionDecl,
+                encoderExtensionDecl
+            ]
+        } else {
+            return [
+                decoderExtensionDecl
+            ]
+        }
     }
 }
 
-// MARK: - Utils
+// MARK: - Utils -
 
 private extension ClassOrStructSafeDecodingMacro {
     static func retries(for declaration: VariableDeclSyntax) -> [Retry] {
@@ -215,6 +229,62 @@ private extension ClassOrStructSafeDecodingMacro {
         ].any
     }
 }
+
+private extension ClassOrStructSafeDecodingMacro {
+    static func shouldImplementEncoding(
+        for attribute: AttributeSyntax
+    ) -> Bool {
+        if let shouldImplementEncoding = attribute
+            .arguments?
+            .as(LabeledExprListSyntax.self)?
+            .compactMap({ argument -> Bool? in
+                if
+                    let labeledExpression = argument.as(LabeledExprSyntax.self),
+                    labeledExpression.label?.text == "shouldImplementEncoding",
+                    labeledExpression
+                        .expression
+                        .as(BooleanLiteralExprSyntax.self)?
+                        .literal
+                        .text == "true"
+                {
+                    return true
+                }
+                return nil
+            }).first
+        {
+            return shouldImplementEncoding
+        }
+        return false
+    }
+}
+
+// MARK: - Encoding -
+
+private extension ClassOrStructSafeDecodingMacro {
+    static func encode(
+        providingExtensionsOf type: some TypeSyntaxProtocol,
+        notComputedNonInitializedTypeProperties: [(PatternBindingListSyntax.Element, Bool, [Retry], (any SyntaxProtocol)?)],
+        accessModifier: String,
+        context: some MacroExpansionContext
+    ) throws -> ExtensionDeclSyntax {
+        for (element, _, _, _) in notComputedNonInitializedTypeProperties {
+            dump(element)
+        }
+        return try ExtensionDeclSyntax("extension \(type)") {
+            try FunctionDeclSyntax("\(raw: accessModifier) func encode(to encoder: Encoder) throws") {
+                CodeBlockItemListSyntax("var container = encoder.container(keyedBy: CodingKeys.self)")
+
+                for (element, _, _, _) in notComputedNonInitializedTypeProperties {
+                    if let identifier = element.pattern.as(IdentifierPatternSyntax.self)?.identifier {
+                        CodeBlockItemListSyntax("try container.encode(\(identifier), forKey: .\(raw: identifier.text))")
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Decoding -
 
 private extension ClassOrStructSafeDecodingMacro {
     static func standardDecoderSyntax(
@@ -494,7 +564,7 @@ private extension ClassOrStructSafeDecodingMacro {
         with retries: [Retry]
     ) -> CodeBlockItemSyntax {
         """
-        self.\(pattern.identifier) = try? container.decode(\(type).self, forKey: .\(pattern.identifier)) \(raw: retries.map { " ?? (try? container.decode(\($0.type), forKey: .\(pattern.identifier))).flatMap(\($0.mapper))" }.joined())
+        self.\(pattern.identifier) = (try? container.decode(\(type).self, forKey: .\(pattern.identifier))) \(raw: retries.map { " ?? (try? container.decode(\($0.type), forKey: .\(pattern.identifier))).flatMap(\($0.mapper))" }.joined())
         """
     }
 
@@ -506,7 +576,7 @@ private extension ClassOrStructSafeDecodingMacro {
         fallback: SyntaxProtocol
     ) -> CodeBlockItemSyntax {
         """
-        self.\(pattern.identifier) = try? container.decode(\(type).self, forKey: .\(pattern.identifier)) \(raw: retries.map { " ?? (try? container.decode(\($0.type), forKey: .\(pattern.identifier))).flatMap(\($0.mapper))" }.joined()) ?? \(fallback)
+        self.\(pattern.identifier) = (try? container.decode(\(type).self, forKey: .\(pattern.identifier))) \(raw: retries.map { " ?? (try? container.decode(\($0.type), forKey: .\(pattern.identifier))).flatMap(\($0.mapper))" }.joined()) ?? \(fallback)
         """
     }
 
