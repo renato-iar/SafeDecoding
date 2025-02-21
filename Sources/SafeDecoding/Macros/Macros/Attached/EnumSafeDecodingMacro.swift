@@ -862,52 +862,28 @@ private extension EnumSafeDecodingMacro {
     static func shouldImplementEncoding(
         for attribute: AttributeSyntax
     ) -> Bool {
-        @discardableResult
-        func printt(_ item: Any) -> Bool {
-            print("===> \(item)")
-            return true
-        }
-
-        @discardableResult
-        func printt(_ message: String, arguments: Any ...) -> Bool {
-            let compoundMessage = arguments.reduce(into: message) { result, argument in
-                result += " \(argument)"
-            }
-
-            print("===> \(compoundMessage)")
-            return true
-        }
-
-        dump(attribute)
         if let shouldImplementEncoding = attribute
             .arguments?
             .as(LabeledExprListSyntax.self)?
             .compactMap({ argument -> Bool? in
-                printt(argument)
                 if
                     let labeledExpression = argument.as(LabeledExprSyntax.self),
-                    printt("#1 labeledExpression: \(labeledExpression)"),
                     labeledExpression.label?.text == "shouldImplementEncoding",
-                    printt("#2"),
                     labeledExpression
                         .expression
                         .as(BooleanLiteralExprSyntax.self)?
                         .literal
                         .text == "true"
                 {
-                    printt("#4")
                     return true
                 }
 
-                printt("#5")
                 return nil
             }).first
         {
-            printt("#6")
             return shouldImplementEncoding
         }
 
-        printt("#7")
         return false
     }
 

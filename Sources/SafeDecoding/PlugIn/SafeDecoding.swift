@@ -7,7 +7,8 @@ import Foundation
         named(CodingKeys),
         named(SafeDecodable),
         named(Decodable),
-        named(init(from:))
+        named(init(from:)),
+        named(encode(to:))
 )
 public macro SafeDecoding(
     reporter: SafeDecodingReporter? = nil,
