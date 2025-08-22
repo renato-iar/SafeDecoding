@@ -10,7 +10,8 @@ import SafeDecodingMacros
 private let testMacros: [String: Macro.Type] = [
     "ClassOrStructSafeDecoding": ClassOrStructSafeDecodingMacro.self,
     "RetryDecoding": RetryDecodingMacro.self,
-    "FallbackDecoding": FallbackDecodingMacro.self
+    "FallbackDecoding": FallbackDecodingMacro.self,
+    "OptionalDecoding": OptionalDecodingMacro.self
 ]
 #endif
 
@@ -677,13 +678,9 @@ extension ClassOrStructSafeDecodingMacrosTests {
 #else
         throw XCTSkip("macros are only supported when running tests for the host platform")
 #endif
-
-
-
     }
 
     func testSafeDecodingFallbackDecoding() throws {
-
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
@@ -720,10 +717,57 @@ extension ClassOrStructSafeDecodingMacrosTests {
 #else
         throw XCTSkip("macros are only supported when running tests for the host platform")
 #endif
+    }
+}
 
+extension ClassOrStructSafeDecodingMacrosTests {
+    func testSafeDecodingOptionalDecoding() throws {
+#if canImport(SafeDecodingMacros)
+        // @FallbackDecoding will be ignored for "int" property as it is non-optional
+        assertMacroExpansion(
+                """
+                @ClassOrStructSafeDecoding
+                struct Model {
+                    @FallbackDecoding(.zero)
+                    @OptionalDecoding(-1)
+                    let int: Int
+                    @OptionalDecoding(false)
+                    let optionalInt: Int?
+                }
+                """,
+                expandedSource:
+                """
 
+                struct Model {
+                    let int: Int
+                    let optionalInt: Int?
+                }
 
-
+                extension Model {
+                    private enum CodingKeys: CodingKey {
+                        case int
+                        case optionalInt
+                    }
+                    init(from decoder: Decoder) throws {
+                        let container = try decoder.container(keyedBy: CodingKeys.self)
+                        do {
+                            self.int = try container.decode(Int.self, forKey: .int)
+                        } catch {
+                            self.int = .zero
+                        }
+                        if (false) {
+                            self.optionalInt = (try? container.decode(Int.self, forKey: .optionalInt))
+                        } else {
+                            self.optionalInt = nil
+                        }
+                    }
+                }
+                """,
+                macros: testMacros
+        )
+#else
+        throw XCTSkip("macros are only supported when running tests for the host platform")
+#endif
     }
 }
 

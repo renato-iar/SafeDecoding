@@ -66,12 +66,27 @@ struct ModelStandardExample {
     let constantInferred = 0
 }
 
+enum FeatureFlag {
+    case someFeature
+}
+
+struct Features {
+    func isEnabled(_ feature: FeatureFlag) -> Bool {
+        true
+    }
+
+    private init() { }
+
+    static let shared = Features()
+}
+
 // Expand macro to see code generated for extended usage of @SafeDecoding
 // using the reporter, as well as @RetryDecoding, @FallbackDecoding and @IgnoreSafeDecoding
 // macros as decorators
 
 @SafeDecoding(reporter: SafeDecodingErrorReporter.shared)
 struct ModelFullExample {
+    let double: Double
     @RetryDecoding(String.self, map: { Int($0, radix: 10) })
     @RetryDecoding(Double.self, map: { Int($0) })
     let integer: Int
@@ -81,6 +96,7 @@ struct ModelFullExample {
     @FallbackDecoding(UUID().uuidString)
     let string: String
     let dictionary: [String: Int]
+    @OptionalDecoding(Features.shared.isEnabled(.someFeature))
     @FallbackDecoding(0)
     @RetryDecoding(String.self, map: { Int($0, radix: 10) })
     @RetryDecoding(Double.self, map: { Int($0) })

@@ -3,7 +3,10 @@ import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
 
 /**
- Implements safe decoding for `struct`s
+ Implements safe decoding for `struct`s, `class`es and `actor`s.
+
+ This implementation covers types that have a fixed property storage layout. Enums, which have a variable
+ storage layout (depending on the case) will be covered by the ``EnumSafeDecodingMacro``.
 
  The `ClassOrStructSafeDecodingMacro` will add conformance to `Decodable` and custom-implement
  its initializer. For all properties suitable properties it will implement custom, safe decoding.
@@ -34,6 +37,8 @@ extension ClassOrStructSafeDecodingMacro: ExtensionMacro {
             memberBlock = structDecl.memberBlock
         } else if let classDecl = declaration.as(ClassDeclSyntax.self) {
             memberBlock = classDecl.memberBlock
+        } else if let actorDecl = declaration.as(ActorDeclSyntax.self) {
+            memberBlock = actorDecl.memberBlock
         } else {
             context.addDiagnostics(
                 from: ClassOrStructSafeDecodingMacro.Errors.onlyApplicableToStructOrClassTypes,
@@ -48,7 +53,7 @@ extension ClassOrStructSafeDecodingMacro: ExtensionMacro {
         } else {
             ""
         }
-        let typeProperties: [(PatternBindingListSyntax.Element, Bool, [Retry], SyntaxProtocol?)] = memberBlock
+        let typeProperties: [(PatternBindingListSyntax.Element, ignore: Bool, retries: [Retry], fallback: SyntaxProtocol?, condition: SyntaxProtocol?)] = memberBlock
             .members
             .compactMap {
                 $0.decl.as(VariableDeclSyntax.self)
@@ -57,8 +62,9 @@ extension ClassOrStructSafeDecodingMacro: ExtensionMacro {
                 let shouldIgnoreProperty = shouldIgnore(property: decl)
                 let retries = shouldIgnoreProperty ? [] : retries(for: decl)
                 let fallback = shouldIgnoreProperty ? nil : fallback(for: decl)
+                let conditional: SyntaxProtocol? = shouldIgnoreProperty ? nil : condition(for: decl)
 
-                return decl.bindings.map { ($0, shouldIgnoreProperty, retries, fallback) }
+                return decl.bindings.map { ($0, shouldIgnoreProperty, retries, fallback, conditional) }
             }
 
         let notComputedNonInitializedTypeProperties = typeProperties.filter { !$0.0.isComputed && !$0.0.isInitialized }
@@ -73,7 +79,7 @@ extension ClassOrStructSafeDecodingMacro: ExtensionMacro {
                 )
             }
 
-            for (property, shouldIgnoreProperty, retries, fallback) in notComputedNonInitializedTypeProperties {
+            for (property, shouldIgnoreProperty, retries, fallback, condition) in notComputedNonInitializedTypeProperties {
                 if
                     let pattern = property.pattern.as(IdentifierPatternSyntax.self),
                     let propertyType = property.typeAnnotation?.type
@@ -87,15 +93,15 @@ extension ClassOrStructSafeDecodingMacro: ExtensionMacro {
                             with: [],
                             fallback: nil
                         )
-                    }
-                    else if let optionalElementType = SyntaxUtils.extractOptionalType(from: propertyType) {
+                    } else if let optionalElementType = SyntaxUtils.extractOptionalType(from: propertyType) {
                         optionalDecoderSyntax(
                             for: pattern,
                             elementType: optionalElementType,
                             reporter: reporter,
                             container: type,
                             with: retries,
-                            fallback: fallback
+                            fallback: fallback,
+                            condition: condition
                         )
                     } else if let arrayElementType = SyntaxUtils.extractArrayType(from: propertyType) {
                         arrayDecoderSyntax(
@@ -134,7 +140,7 @@ extension ClassOrStructSafeDecodingMacro: ExtensionMacro {
         }
 
         let codingKeys = try EnumDeclSyntax("private enum CodingKeys: CodingKey") {
-            for (property, _, _, _) in typeProperties
+            for (property, _, _, _, _) in typeProperties
             where !property.isComputed && !property.isInitialized
             {
                 if let pattern = property.pattern.as(IdentifierPatternSyntax.self) {
@@ -201,6 +207,23 @@ private extension ClassOrStructSafeDecodingMacro {
 
         return fallbacks.first
     }
+
+    static func condition(for declaration: VariableDeclSyntax) -> SyntaxProtocol? {
+        let conditions = declaration
+            .attributes
+            .compactMap { syntax -> SyntaxProtocol? in
+                guard
+                    let attribute = syntax.as(AttributeSyntax.self),
+                    attribute.attributeName.as(IdentifierTypeSyntax.self)?.name.text == "OptionalDecoding",
+                    let condition = attribute.arguments?.as(LabeledExprListSyntax.self)?.first
+                else {
+                    return nil
+                }
+                return condition
+            }
+
+        return conditions.first
+    }
 }
 
 private extension ClassOrStructSafeDecodingMacro {
@@ -263,18 +286,18 @@ private extension ClassOrStructSafeDecodingMacro {
 private extension ClassOrStructSafeDecodingMacro {
     static func encode(
         providingExtensionsOf type: some TypeSyntaxProtocol,
-        notComputedNonInitializedTypeProperties: [(PatternBindingListSyntax.Element, Bool, [Retry], (any SyntaxProtocol)?)],
+        notComputedNonInitializedTypeProperties: [(PatternBindingListSyntax.Element, ignore: Bool, retries: [Retry], fallback: (any SyntaxProtocol)?, condition: (any SyntaxProtocol)?)],
         accessModifier: String,
         context: some MacroExpansionContext
     ) throws -> ExtensionDeclSyntax {
-        for (element, _, _, _) in notComputedNonInitializedTypeProperties {
+        for (element, _, _, _, _) in notComputedNonInitializedTypeProperties {
             dump(element)
         }
         return try ExtensionDeclSyntax("extension \(type)") {
             try FunctionDeclSyntax("\(raw: accessModifier) func encode(to encoder: Encoder) throws") {
                 CodeBlockItemListSyntax("var container = encoder.container(keyedBy: CodingKeys.self)")
 
-                for (element, _, _, _) in notComputedNonInitializedTypeProperties {
+                for (element, _, _, _, _) in notComputedNonInitializedTypeProperties {
                     if let identifier = element.pattern.as(IdentifierPatternSyntax.self)?.identifier {
                         CodeBlockItemListSyntax("try container.encode(\(identifier), forKey: .\(raw: identifier.text))")
                     }
@@ -483,9 +506,10 @@ private extension ClassOrStructSafeDecodingMacro {
         reporter: ExprSyntax?,
         container: TypeSyntaxProtocol,
         with retries: [Retry],
-        fallback: SyntaxProtocol?
+        fallback: SyntaxProtocol?,
+        condition: SyntaxProtocol?
     ) -> CodeBlockItemSyntax {
-        return if let reporter {
+        let decoding = if let reporter {
             optionalDecoderSyntaxWithReporting(
                 for: pattern,
                 elementType: elementType,
@@ -501,6 +525,19 @@ private extension ClassOrStructSafeDecodingMacro {
                 with: retries,
                 fallback: fallback
             )
+        }
+
+        if let condition {
+            return
+                    """
+                    if (\(condition)) {
+                        \(decoding)
+                    } else {
+                        self.\(pattern.identifier) = nil
+                    }
+                    """
+        } else {
+            return decoding
         }
     }
 

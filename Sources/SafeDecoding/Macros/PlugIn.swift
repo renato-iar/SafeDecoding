@@ -11,6 +11,7 @@ struct SafeDecodingPlugin: CompilerPlugin {
         IgnoreSafeDecodingMacro.self,
         RetryDecodingMacro.self,
         FallbackDecodingMacro.self,
-        CaseNameDecodingMacro.self
+        CaseNameDecodingMacro.self,
+        OptionalDecodingMacro.self
     ]
 }
