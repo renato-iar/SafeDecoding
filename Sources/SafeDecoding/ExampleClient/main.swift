@@ -44,14 +44,14 @@ class SafeDecodingErrorReporter: SafeDecodingReporter {
     static let shared = SafeDecodingErrorReporter()
 }
 
-@SafeDecoding(reporter: SafeDecodingErrorReporter.shared)
-struct SubModel {
+@SafeDecoding(reporter: SafeDecodingErrorReporter.shared, shouldImplementEncoding: true)
+struct SubModel: Codable {
     let strings: Array<String>
 }
 
 // Expand macro to see code generated for the base usage of @SafeDecoding
 
-@SafeDecoding(reporter: SafeDecodingErrorReporter.shared)
+@SafeDecoding(reporter: SafeDecodingErrorReporter.shared, shouldImplementEncoding: true)
 struct ModelStandardExample {
     let integer: Int
     let integerArray: [Int]
@@ -84,8 +84,9 @@ struct Features {
 // using the reporter, as well as @RetryDecoding, @FallbackDecoding and @IgnoreSafeDecoding
 // macros as decorators
 
-@SafeDecoding(reporter: SafeDecodingErrorReporter.shared)
+@SafeDecoding(reporter: SafeDecodingErrorReporter.shared, shouldImplementEncoding: true)
 struct ModelFullExample {
+    @PropertyNameDecoding("custon-double")
     let double: Double
     @RetryDecoding(String.self, map: { Int($0, radix: 10) })
     @RetryDecoding(Double.self, map: { Int($0) })
