@@ -53,22 +53,23 @@ extension ClassOrStructSafeDecodingMacro: ExtensionMacro {
         } else {
             ""
         }
-        let typeProperties: [(PatternBindingListSyntax.Element, ignore: Bool, retries: [Retry], fallback: SyntaxProtocol?, condition: SyntaxProtocol?)] = memberBlock
+        let typeProperties: [(PatternBindingListSyntax.Element, codingKeyName: String?, ignore: Bool, retries: [Retry], fallback: SyntaxProtocol?, condition: SyntaxProtocol?)] = memberBlock
             .members
             .compactMap {
                 $0.decl.as(VariableDeclSyntax.self)
             }
-            .flatMap { decl in
+            .flatMap { (decl: VariableDeclSyntax) in
                 let shouldIgnoreProperty = shouldIgnore(property: decl)
                 let retries = shouldIgnoreProperty ? [] : retries(for: decl)
                 let fallback = shouldIgnoreProperty ? nil : fallback(for: decl)
                 let conditional: SyntaxProtocol? = shouldIgnoreProperty ? nil : condition(for: decl)
+                let codingKeyName = Self.propertyNameOverride(for: decl)
 
-                return decl.bindings.map { ($0, shouldIgnoreProperty, retries, fallback, conditional) }
+                return decl.bindings.map { ($0, codingKeyName, shouldIgnoreProperty, retries, fallback, conditional) }
             }
 
         let notComputedNonInitializedTypeProperties = typeProperties.filter { !$0.0.isComputed && !$0.0.isInitialized }
-        let reporter = node.as(AttributeSyntax.self)?.arguments?.as(LabeledExprListSyntax.self)?.first { $0.label?.text == "reporter" }?.expression
+        let reporter = node.arguments?.as(LabeledExprListSyntax.self)?.first { $0.label?.text == "reporter" }?.expression
 
         let initializer = try InitializerDeclSyntax("\(raw: accessModifier)init(from decoder: Decoder) throws") {
             if !notComputedNonInitializedTypeProperties.isEmpty {
@@ -79,7 +80,7 @@ extension ClassOrStructSafeDecodingMacro: ExtensionMacro {
                 )
             }
 
-            for (property, shouldIgnoreProperty, retries, fallback, condition) in notComputedNonInitializedTypeProperties {
+            for (property, codingKeyName, shouldIgnoreProperty, retries, fallback, condition) in notComputedNonInitializedTypeProperties {
                 if
                     let pattern = property.pattern.as(IdentifierPatternSyntax.self),
                     let propertyType = property.typeAnnotation?.type
@@ -139,13 +140,13 @@ extension ClassOrStructSafeDecodingMacro: ExtensionMacro {
             }
         }
 
-        let codingKeys = try EnumDeclSyntax("private enum CodingKeys: CodingKey") {
-            for (property, _, _, _, _) in typeProperties
+        let codingKeys = try EnumDeclSyntax("private enum CodingKeys: String, CodingKey") {
+            for (property, codingKeyName, _, _, _, _) in typeProperties
             where !property.isComputed && !property.isInitialized
             {
                 if let pattern = property.pattern.as(IdentifierPatternSyntax.self) {
                     """
-                    case \(pattern.identifier)
+                    case \(pattern.identifier)\(raw: (codingKeyName.flatMap { name in " = \"\(name)\"" } ?? ""))
                     """
                 }
             }
@@ -188,41 +189,61 @@ private extension ClassOrStructSafeDecodingMacro {
             .attributes
             .compactMap(Retry.init(from:))
     }
+
+    static func propertyNameOverride(
+        for case: VariableDeclSyntax
+    ) -> String? {
+        `case`
+            .attributes
+            .first { attribute in
+                attribute
+                    .as(AttributeSyntax.self)?
+                    .attributeName
+                    .as(IdentifierTypeSyntax.self)?
+                    .name
+                    .text == "PropertyNameDecoding"
+            }
+            .flatMap { attribute in
+                attribute
+                    .as(AttributeSyntax.self)?
+                    .arguments?
+                    .as(LabeledExprListSyntax.self)?
+                    .first?
+                    .expression
+                    .as(StringLiteralExprSyntax.self)?
+                    .segments
+                    .first?
+                    .as(StringSegmentSyntax.self)?
+                    .content
+                    .text
+            }
+    }
 }
 
 private extension ClassOrStructSafeDecodingMacro {
-    static func fallback(for declaration: VariableDeclSyntax) -> SyntaxProtocol? {
-        let fallbacks = declaration
+    static func attribute(_ name: String, for declaration: VariableDeclSyntax) -> SyntaxProtocol? {
+        let attributes = declaration
             .attributes
             .compactMap { syntax -> SyntaxProtocol? in
                 guard
                     let attribute = syntax.as(AttributeSyntax.self),
-                    attribute.attributeName.as(IdentifierTypeSyntax.self)?.name.text == "FallbackDecoding",
-                    let fallback = attribute.arguments?.as(LabeledExprListSyntax.self)?.first
+                    attribute.attributeName.as(IdentifierTypeSyntax.self)?.name.text == name,
+                    let arg = attribute.arguments?.as(LabeledExprListSyntax.self)?.first
                 else {
                     return nil
                 }
-                return fallback
+                return arg
             }
 
-        return fallbacks.first
+        return attributes.first
+    }
+
+    static func fallback(for declaration: VariableDeclSyntax) -> SyntaxProtocol? {
+        attribute("FallbackDecoding", for: declaration)
     }
 
     static func condition(for declaration: VariableDeclSyntax) -> SyntaxProtocol? {
-        let conditions = declaration
-            .attributes
-            .compactMap { syntax -> SyntaxProtocol? in
-                guard
-                    let attribute = syntax.as(AttributeSyntax.self),
-                    attribute.attributeName.as(IdentifierTypeSyntax.self)?.name.text == "OptionalDecoding",
-                    let condition = attribute.arguments?.as(LabeledExprListSyntax.self)?.first
-                else {
-                    return nil
-                }
-                return condition
-            }
-
-        return conditions.first
+        attribute("OptionalDecoding", for: declaration)
     }
 }
 
@@ -242,11 +263,8 @@ private extension ClassOrStructSafeDecodingMacro {
                 .bindings
                 .compactMap { binding in
                     binding.accessorBlock?.accessors.as(AccessorDeclListSyntax.self)?.first { accessor in
-                        if let accessorSpecifier = accessor.as(AccessorDeclSyntax.self)?.accessorSpecifier {
-                            return accessorSpecifier.text != "didSet" && accessorSpecifier.text != "willSet"
-                        }
-
-                        return false
+                        let accessorSpecifier = accessor.accessorSpecifier
+                        return accessorSpecifier.text != "didSet" && accessorSpecifier.text != "willSet"
                     } != nil
                 }.any
         ].any
@@ -254,17 +272,14 @@ private extension ClassOrStructSafeDecodingMacro {
 }
 
 private extension ClassOrStructSafeDecodingMacro {
-    static func shouldImplementEncoding(
-        for attribute: AttributeSyntax
-    ) -> Bool {
+    static func shouldImplementEncoding(for attribute: AttributeSyntax) -> Bool {
         if let shouldImplementEncoding = attribute
             .arguments?
             .as(LabeledExprListSyntax.self)?
             .compactMap({ argument -> Bool? in
                 if
-                    let labeledExpression = argument.as(LabeledExprSyntax.self),
-                    labeledExpression.label?.text == "shouldImplementEncoding",
-                    labeledExpression
+                    argument.label?.text == "shouldImplementEncoding",
+                    argument
                         .expression
                         .as(BooleanLiteralExprSyntax.self)?
                         .literal
@@ -286,18 +301,18 @@ private extension ClassOrStructSafeDecodingMacro {
 private extension ClassOrStructSafeDecodingMacro {
     static func encode(
         providingExtensionsOf type: some TypeSyntaxProtocol,
-        notComputedNonInitializedTypeProperties: [(PatternBindingListSyntax.Element, ignore: Bool, retries: [Retry], fallback: (any SyntaxProtocol)?, condition: (any SyntaxProtocol)?)],
+        notComputedNonInitializedTypeProperties: [(PatternBindingListSyntax.Element, codingKeyName: String?, ignore: Bool, retries: [Retry], fallback: (any SyntaxProtocol)?, condition: (any SyntaxProtocol)?)],
         accessModifier: String,
         context: some MacroExpansionContext
     ) throws -> ExtensionDeclSyntax {
-        for (element, _, _, _, _) in notComputedNonInitializedTypeProperties {
+        for (element, _, _, _, _, _) in notComputedNonInitializedTypeProperties {
             dump(element)
         }
         return try ExtensionDeclSyntax("extension \(type)") {
             try FunctionDeclSyntax("\(raw: accessModifier) func encode(to encoder: Encoder) throws") {
                 CodeBlockItemListSyntax("var container = encoder.container(keyedBy: CodingKeys.self)")
 
-                for (element, _, _, _, _) in notComputedNonInitializedTypeProperties {
+                for (element, _, _, _, _, _) in notComputedNonInitializedTypeProperties {
                     if let identifier = element.pattern.as(IdentifierPatternSyntax.self)?.identifier {
                         CodeBlockItemListSyntax("try container.encode(\(identifier), forKey: .\(raw: identifier.text))")
                     }

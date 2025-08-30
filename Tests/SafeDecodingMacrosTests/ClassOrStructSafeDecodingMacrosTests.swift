@@ -11,7 +11,8 @@ private let testMacros: [String: Macro.Type] = [
     "ClassOrStructSafeDecoding": ClassOrStructSafeDecodingMacro.self,
     "RetryDecoding": RetryDecodingMacro.self,
     "FallbackDecoding": FallbackDecodingMacro.self,
-    "OptionalDecoding": OptionalDecodingMacro.self
+    "OptionalDecoding": OptionalDecodingMacro.self,
+    "PropertyNameDecoding": PropertyNameDecodingMacro.self
 ]
 #endif
 
@@ -39,14 +40,14 @@ extension ClassOrStructSafeDecodingMacrosTests {
                 }
 
                 extension Model {
-                    private enum CodingKeys: CodingKey {
+                    private enum CodingKeys: String, CodingKey {
                         case optional
                         case optionalGeneric
                     }
                     init(from decoder: Decoder) throws {
                         let container = try decoder.container(keyedBy: CodingKeys.self)
-                        self.optional = try? container.decode(Int.self, forKey: .optional)
-                        self.optionalGeneric = try? container.decode(Int.self, forKey: .optionalGeneric)
+                        self.optional = (try? container.decode(Int.self, forKey: .optional))
+                        self.optionalGeneric = (try? container.decode(Int.self, forKey: .optionalGeneric))
                     }
                 }
                 """,
@@ -74,7 +75,7 @@ extension ClassOrStructSafeDecodingMacrosTests {
                 }
 
                 extension Model {
-                    private enum CodingKeys: CodingKey {
+                    private enum CodingKeys: String, CodingKey {
                         case set
                     }
                     init(from decoder: Decoder) throws {
@@ -113,7 +114,7 @@ extension ClassOrStructSafeDecodingMacrosTests {
                 }
 
                 extension Model {
-                    private enum CodingKeys: CodingKey {
+                    private enum CodingKeys: String, CodingKey {
                         case array
                         case arrayGeneric
                     }
@@ -154,7 +155,7 @@ extension ClassOrStructSafeDecodingMacrosTests {
                 }
 
                 extension Model {
-                    private enum CodingKeys: CodingKey {
+                    private enum CodingKeys: String, CodingKey {
                         case dictionary
                         case dictionaryGeneric
                     }
@@ -198,7 +199,7 @@ extension ClassOrStructSafeDecodingMacrosTests {
                 }
 
                 extension Model {
-                    private enum CodingKeys: CodingKey {
+                    private enum CodingKeys: String, CodingKey {
                         case optional
                         case optionalGeneric
                     }
@@ -243,7 +244,7 @@ extension ClassOrStructSafeDecodingMacrosTests {
                 }
 
                 extension Model {
-                    private enum CodingKeys: CodingKey {
+                    private enum CodingKeys: String, CodingKey {
                         case set
                     }
                     init(from decoder: Decoder) throws {
@@ -263,7 +264,7 @@ extension ClassOrStructSafeDecodingMacrosTests {
                             self.set = items
                         } catch {
                             self.set = []
-                            reporter.report(error: error, of: "set", decoding: Set<Int> .self, in: (Model).self)
+                            reporter.report(error: error, of: "set", decoding: Set<Int>.self, in: (Model).self)
                         }
                     }
                 }
@@ -294,7 +295,7 @@ extension ClassOrStructSafeDecodingMacrosTests {
                 }
 
                 extension Model {
-                    private enum CodingKeys: CodingKey {
+                    private enum CodingKeys: String, CodingKey {
                         case array
                         case arrayGeneric
                     }
@@ -363,7 +364,7 @@ extension ClassOrStructSafeDecodingMacrosTests {
                 }
 
                 extension Model {
-                    private enum CodingKeys: CodingKey {
+                    private enum CodingKeys: String, CodingKey {
                         case dictionary
                         case dictionaryGeneric
                     }
@@ -433,7 +434,7 @@ extension ClassOrStructSafeDecodingMacrosTests {
                 }
 
                 extension Model {
-                    private enum CodingKeys: CodingKey {
+                    private enum CodingKeys: String, CodingKey {
                     }
                     init(from decoder: Decoder) throws {
                     }
@@ -465,7 +466,7 @@ extension ClassOrStructSafeDecodingMacrosTests {
                 }
 
                 extension Model {
-                    private enum CodingKeys: CodingKey {
+                    private enum CodingKeys: String, CodingKey {
                     }
                     init(from decoder: Decoder) throws {
                     }
@@ -500,7 +501,7 @@ extension ClassOrStructSafeDecodingMacrosTests {
                 }
 
                 extension Model {
-                    private enum CodingKeys: CodingKey {
+                    private enum CodingKeys: String, CodingKey {
                     }
                     init(from decoder: Decoder) throws {
                     }
@@ -530,7 +531,7 @@ extension ClassOrStructSafeDecodingMacrosTests {
                 }
 
                 extension Model {
-                    private enum CodingKeys: CodingKey {
+                    private enum CodingKeys: String, CodingKey {
                     }
                     internal init(from decoder: Decoder) throws {
                     }
@@ -560,7 +561,7 @@ extension ClassOrStructSafeDecodingMacrosTests {
                 }
 
                 extension Model {
-                    private enum CodingKeys: CodingKey {
+                    private enum CodingKeys: String, CodingKey {
                     }
                     package init(from decoder: Decoder) throws {
                     }
@@ -590,7 +591,7 @@ extension ClassOrStructSafeDecodingMacrosTests {
                 }
 
                 extension Model {
-                    private enum CodingKeys: CodingKey {
+                    private enum CodingKeys: String, CodingKey {
                     }
                     public init(from decoder: Decoder) throws {
                     }
@@ -620,7 +621,7 @@ extension ClassOrStructSafeDecodingMacrosTests {
                 }
 
                 extension Model {
-                    private enum CodingKeys: CodingKey {
+                    private enum CodingKeys: String, CodingKey {
                     }
                     open init(from decoder: Decoder) throws {
                     }
@@ -653,7 +654,7 @@ extension ClassOrStructSafeDecodingMacrosTests {
                 }
 
                 extension Model {
-                    private enum CodingKeys: CodingKey {
+                    private enum CodingKeys: String, CodingKey {
                         case int
                     }
                     init(from decoder: Decoder) throws {
@@ -661,8 +662,7 @@ extension ClassOrStructSafeDecodingMacrosTests {
                         do {
                             self.int = try container.decode(Int.self, forKey: .int)
                         } catch {
-                            if let retry = (try? container.decode(String.self, forKey: .int)).flatMap({
-                                    Int.init($0, radix: 10)
+                            if let retry = (try? container.decode(String.self, forKey: .int)).flatMap({ Int.init($0, radix: 10)
                                 }) {
                                 self.int = retry
                                 SafeDecodingErrorReporter.shared.report(error: error, of: "int", decoding: Int.self, in: (Model).self)
@@ -698,7 +698,7 @@ extension ClassOrStructSafeDecodingMacrosTests {
                 }
 
                 extension Model {
-                    private enum CodingKeys: CodingKey {
+                    private enum CodingKeys: String, CodingKey {
                         case int
                     }
                     init(from decoder: Decoder) throws {
@@ -744,7 +744,7 @@ extension ClassOrStructSafeDecodingMacrosTests {
                 }
 
                 extension Model {
-                    private enum CodingKeys: CodingKey {
+                    private enum CodingKeys: String, CodingKey {
                         case int
                         case optionalInt
                     }
@@ -770,6 +770,44 @@ extension ClassOrStructSafeDecodingMacrosTests {
 #endif
     }
 }
+
+extension ClassOrStructSafeDecodingMacrosTests {
+    func testSafeDecodingPropertyNameDecoding() throws {
+#if canImport(SafeDecodingMacros)
+        // @FallbackDecoding will be ignored for "int" property as it is non-optional
+        assertMacroExpansion(
+                """
+                @ClassOrStructSafeDecoding
+                struct Model {
+                    @PropertyNameDecoding("override-name")
+                    let property: Int
+                }
+                """,
+                expandedSource:
+                """
+
+                struct Model {
+                    let property: Int
+                }
+
+                extension Model {
+                    private enum CodingKeys: String, CodingKey {
+                        case property = "override-name"
+                    }
+                    init(from decoder: Decoder) throws {
+                        let container = try decoder.container(keyedBy: CodingKeys.self)
+                        self.property = try container.decode(Int.self, forKey: .property)
+                    }
+                }
+                """,
+                macros: testMacros
+        )
+#else
+        throw XCTSkip("macros are only supported when running tests for the host platform")
+#endif
+    }
+}
+
 
 extension ClassOrStructSafeDecodingMacrosTests {
     func testMacro() throws {
@@ -802,7 +840,7 @@ extension ClassOrStructSafeDecodingMacrosTests {
             }
 
             extension Custom {
-                private enum CodingKeys: CodingKey {
+                private enum CodingKeys: String, CodingKey {
                     case integer
                     case optional
                     case array
@@ -813,7 +851,7 @@ extension ClassOrStructSafeDecodingMacrosTests {
                 public init(from decoder: Decoder) throws {
                     let container = try decoder.container(keyedBy: CodingKeys.self)
                     self.integer = try container.decode(Int .self, forKey: .integer)
-                    self.optional = try? container.decode(Int.self, forKey: .optional)
+                    self.optional = (try? container.decode(Int.self, forKey: .optional))
                     self.array = try container.decode([Int].self, forKey: .array)
                     self.genericArray = ((try? container.decode([SafeDecodable<Int>].self, forKey: .genericArray)) ?? []).compactMap {
                         $0.decoded

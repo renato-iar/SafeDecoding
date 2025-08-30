@@ -7,11 +7,8 @@ extension SyntaxUtils {
     static func accessControl(decl: DeclGroupSyntax) -> AccessControl? {
         decl
             .modifiers
-            .compactMap {
-                $0.as(DeclModifierSyntax.self)
-                    .flatMap {
-                        AccessControl(rawValue: $0.name.text)
-                    }
+            .compactMap { (modifier: DeclModifierListSyntax.Element) in
+                AccessControl(rawValue: modifier.name.text)
             }
             .first
     }
@@ -68,10 +65,10 @@ extension SyntaxUtils {
             let type = type.as(IdentifierTypeSyntax.self),
             type.name.text == "Dictionary",
             type.genericArgumentClause?.arguments.count == 2,
-            let keyType = type.genericArgumentClause?.arguments.first?.argument,
-            let valueType = type.genericArgumentClause?.arguments.last?.argument
+            case let .type(keyType) = type.genericArgumentClause?.arguments.first?.argument,
+            case let .type(valueType) = type.genericArgumentClause?.arguments.last?.argument
         {
-            return (keyType, valueType)
+            return (keyType , valueType)
         }
 
         return nil
@@ -84,9 +81,10 @@ extension SyntaxUtils {
         if
             let type = type.as(IdentifierTypeSyntax.self),
             type.name.text == genericTypeName,
-            type.genericArgumentClause?.arguments.count == 1
+            type.genericArgumentClause?.arguments.count == 1,
+            case let .type(genericType) = type.genericArgumentClause?.arguments.first?.argument
         {
-            return type.genericArgumentClause?.arguments.first?.argument
+            return genericType
         }
 
         return nil

@@ -18,8 +18,8 @@ struct Retry {
             attribute.attributeName.as(IdentifierTypeSyntax.self)?.name.text == "RetryDecoding",
             let arguments = attribute.arguments?.as(LabeledExprListSyntax.self),
             arguments.count == 2,
-            let type = arguments.first?.as(LabeledExprSyntax.self)?.expression,
-            let mapper = arguments.last?.as(LabeledExprSyntax.self)?.expression
+            let type = arguments.first?.expression,
+            let mapper = arguments.last?.expression
         else {
             return nil
         }

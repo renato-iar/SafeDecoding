@@ -40,9 +40,8 @@ extension EnumSafeDecodingMacro: ExtensionMacro {
         let cases = enumDecl
             .memberBlock
             .members
-            .compactMap({
-                $0
-                    .as(MemberBlockItemSyntax.self)?
+            .compactMap({ member in
+                member
                     .decl
                     .as(EnumCaseDeclSyntax.self)
             })
@@ -177,13 +176,10 @@ private extension EnumSafeDecodingMacro {
                         let parameters = element
                             .parameterClause?
                             .parameters
-                            .map({
-                                $0.as(EnumCaseParameterSyntax.self)
-                            })
                     {
                         try EnumDeclSyntax("private enum \(raw: rootCodingKeysName)_\(raw: elementName): String, CodingKey") {
                             for (index, parameter) in parameters.enumerated() {
-                                let parameterName = parameter?.firstName?.text ?? "_\(index)"
+                                let parameterName = parameter.firstName?.text ?? "_\(index)"
                                 try EnumCaseDeclSyntax("case \(raw: parameterName)")
                             }
                         }
@@ -202,7 +198,7 @@ private extension EnumSafeDecodingMacro {
                         rootCodingKeysName: rootCodingKeysName
                     )
 
-                    for (index, parameter) in (element.parameterClause?.parameters.compactMap({ $0.as(EnumCaseParameterSyntax.self) }) ?? []).enumerated() {
+                    for (index, parameter) in (element.parameterClause?.parameters ?? []).enumerated() {
                         try decode(
                             parameter: parameter,
                             at: index,
@@ -302,11 +298,10 @@ private extension EnumSafeDecodingMacro {
                         let parameters = element
                             .parameterClause?
                             .parameters
-                            .map({ $0.as(EnumCaseParameterSyntax.self) })
                     {
                         try EnumDeclSyntax("private enum \(raw: rootCodingKeysName)_\(raw: element.name.text): String, CodingKey") {
                             for (index, parameter) in parameters.enumerated() {
-                                try EnumCaseDeclSyntax("case \(raw: parameter?.firstName?.text ?? "_\(index)")")
+                                try EnumCaseDeclSyntax("case \(raw: parameter.firstName?.text ?? "_\(index)")")
                             }
                         }
                     }
@@ -321,7 +316,7 @@ private extension EnumSafeDecodingMacro {
                         rootCodingKeysName: rootCodingKeysName
                     )
 
-                    for (index, parameter) in (element.parameterClause?.parameters.compactMap({ $0.as(EnumCaseParameterSyntax.self) }) ?? []).enumerated() {
+                    for (index, parameter) in (element.parameterClause?.parameters ?? []).enumerated() {
                         try decode(
                             parameter: parameter,
                             at: index,
@@ -354,12 +349,6 @@ private extension EnumSafeDecodingMacro {
         element: EnumCaseElementListSyntax.Element,
         rootCodingKeysName: String
     ) throws -> MemberBlockItemListSyntax {
-        guard
-            let element = element.as(EnumCaseElementSyntax.self)
-        else {
-            throw EnumSafeDecodingMacro.Errors.unexpectedError
-        }
-
         let caseName = element.name.text
         let parameters = element.parameterClause?.parameters.map { $0 } ?? []
 
@@ -824,16 +813,14 @@ private extension EnumSafeDecodingMacro {
             .as(LabeledExprListSyntax.self)?
             .compactMap({ argument -> String? in
                 guard
-                    let labeledExpression = argument.as(LabeledExprSyntax.self),
-                    labeledExpression.label?.text == "decodingStrategy",
-                    let expression = labeledExpression
+                    argument.label?.text == "decodingStrategy",
+                    let expression = argument
                         .expression
                         .as(FunctionCallExprSyntax.self),
                     expression
                         .calledExpression
                         .as(MemberAccessExprSyntax.self)?
                         .declName
-                        .as(DeclReferenceExprSyntax.self)?
                         .baseName
                         .text == "caseByObjectProperty",
                     let caseName = expression
@@ -867,9 +854,8 @@ private extension EnumSafeDecodingMacro {
             .as(LabeledExprListSyntax.self)?
             .compactMap({ argument -> Bool? in
                 if
-                    let labeledExpression = argument.as(LabeledExprSyntax.self),
-                    labeledExpression.label?.text == "shouldImplementEncoding",
-                    labeledExpression
+                    argument.label?.text == "shouldImplementEncoding",
+                    argument
                         .expression
                         .as(BooleanLiteralExprSyntax.self)?
                         .literal
