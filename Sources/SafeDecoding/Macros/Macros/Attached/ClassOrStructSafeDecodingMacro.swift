@@ -80,7 +80,7 @@ extension ClassOrStructSafeDecodingMacro: ExtensionMacro {
                 )
             }
 
-            for (property, codingKeyName, shouldIgnoreProperty, retries, fallback, condition) in notComputedNonInitializedTypeProperties {
+            for (property, _, shouldIgnoreProperty, retries, fallback, condition) in notComputedNonInitializedTypeProperties {
                 if
                     let pattern = property.pattern.as(IdentifierPatternSyntax.self),
                     let propertyType = property.typeAnnotation?.type
@@ -190,9 +190,7 @@ private extension ClassOrStructSafeDecodingMacro {
             .compactMap(Retry.init(from:))
     }
 
-    static func propertyNameOverride(
-        for case: VariableDeclSyntax
-    ) -> String? {
+    static func propertyNameOverride(for case: VariableDeclSyntax) -> String? {
         `case`
             .attributes
             .first { attribute in
@@ -203,19 +201,37 @@ private extension ClassOrStructSafeDecodingMacro {
                     .name
                     .text == "PropertyNameDecoding"
             }
-            .flatMap { attribute in
-                attribute
+            .flatMap { attribute -> String? in
+                guard let expression = attribute
                     .as(AttributeSyntax.self)?
                     .arguments?
                     .as(LabeledExprListSyntax.self)?
                     .first?
                     .expression
+                else {
+                    return nil
+                }
+
+                if let stringLiteral = expression
                     .as(StringLiteralExprSyntax.self)?
                     .segments
                     .first?
                     .as(StringSegmentSyntax.self)?
                     .content
-                    .text
+                    .text {
+                    return stringLiteral
+                } else if let rawCasingStrategy = expression
+                    .as(MemberAccessExprSyntax.self)?
+                    .declName
+                    .baseName
+                    .text,
+                          let casingStrategy = PropertyNameCasingStrategy(rawValue: rawCasingStrategy),
+                          let caseName = `case`.bindings.first?.pattern.as(IdentifierPatternSyntax.self)?.identifier.text
+                {
+                    return casingStrategy.casing(caseName)
+                } else {
+                    return nil
+                }
             }
     }
 }
