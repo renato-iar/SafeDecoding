@@ -781,6 +781,18 @@ extension ClassOrStructSafeDecodingMacrosTests {
                 struct Model {
                     @PropertyNameDecoding("override-name")
                     let property: Int
+                    @PropertyNameDecoding(casing: .camel)
+                    let intPropertyCamel: Int
+                    @PropertyNameDecoding(casing: .snake)
+                    let intPropertySnake: Int
+                    @PropertyNameDecoding(casing: .snakeUppercase)
+                    let intPropertySnakeUppercase: Int
+                    @PropertyNameDecoding(casing: .kebab)
+                    let intPropertyKebab: Int
+                    @PropertyNameDecoding(casing: .kebabUppercase)
+                    let intPropertyKebabUppercase: Int
+                    @PropertyNameDecoding(casing: .flat)
+                    let intPropertyFlat: Int
                 }
                 """,
                 expandedSource:
@@ -788,15 +800,33 @@ extension ClassOrStructSafeDecodingMacrosTests {
 
                 struct Model {
                     let property: Int
+                    let intPropertyCamel: Int
+                    let intPropertySnake: Int
+                    let intPropertySnakeUppercase: Int
+                    let intPropertyKebab: Int
+                    let intPropertyKebabUppercase: Int
+                    let intPropertyFlat: Int
                 }
 
                 extension Model {
                     private enum CodingKeys: String, CodingKey {
                         case property = "override-name"
+                        case intPropertyCamel = "intPropertyCamel"
+                        case intPropertySnake = "int_property_snake"
+                        case intPropertySnakeUppercase = "INT_PROPERTY_SNAKE_UPPERCASE"
+                        case intPropertyKebab = "int-property-kebab"
+                        case intPropertyKebabUppercase = "INT-PROPERTY-KEBAB-UPPERCASE"
+                        case intPropertyFlat = "intpropertyflat"
                     }
                     init(from decoder: Decoder) throws {
                         let container = try decoder.container(keyedBy: CodingKeys.self)
                         self.property = try container.decode(Int.self, forKey: .property)
+                        self.intPropertyCamel = try container.decode(Int.self, forKey: .intPropertyCamel)
+                        self.intPropertySnake = try container.decode(Int.self, forKey: .intPropertySnake)
+                        self.intPropertySnakeUppercase = try container.decode(Int.self, forKey: .intPropertySnakeUppercase)
+                        self.intPropertyKebab = try container.decode(Int.self, forKey: .intPropertyKebab)
+                        self.intPropertyKebabUppercase = try container.decode(Int.self, forKey: .intPropertyKebabUppercase)
+                        self.intPropertyFlat = try container.decode(Int.self, forKey: .intPropertyFlat)
                     }
                 }
                 """,
