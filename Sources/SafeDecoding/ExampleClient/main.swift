@@ -92,7 +92,9 @@ struct ModelFullExample {
     @RetryDecoding(Double.self, map: { Int($0) })
     let integer: Int
     @IgnoreSafeDecoding
+    @PropertyNameDecoding(casing: .snake)
     let integerArray: [Int]
+    @PropertyNameDecoding(casing: .kebabUppercase)
     let genericArray: Array<String>
     @FallbackDecoding(UUID().uuidString)
     let string: String

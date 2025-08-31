@@ -3,6 +3,6 @@ public enum PropertyNameCasingStrategy {
     case snake
     case snakeUppercase
     case kebab
-    case kebabUpercase
+    case kebabUppercase
     case flat
 }
