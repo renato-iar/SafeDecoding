@@ -112,7 +112,21 @@ struct ModelFullExample {
     let constantInferred = 0
 }
 
-// Decoding tests
+// Decoding/encoding tests
+
+func testEncoding<T: Encodable>(input: T) {
+    do {
+        let data = try JSONEncoder().encode(input)
+
+        if let json = String(data: data, encoding: .utf8) {
+            print("===> JSON for \(input) of type \(T.self): \(json)")
+        } else {
+            print("===> JSON string conversion failed for \(input) of type \(T.self)")
+        }
+    } catch {
+        print("===> JSON Encoding failed for type \(T.self): \(error)")
+    }
+}
 
 func testDecoding<T: Decodable>(_: T.Type, input: String) {
     do {
@@ -156,7 +170,7 @@ testDecoding(
     shouldImplementEncoding: true,
     reporter: SafeDecodingErrorReporter.shared
 )
-enum MediaAssetNested {
+enum MediaAssetNested: Codable {
     @CaseNameDecoding("ASSET/PROGRAMME")
     case vod(String?, String)
     @CaseNameDecoding("ASSET/SERIES")
@@ -179,8 +193,24 @@ testDecoding(
         """
 )
 
-@SafeDecoding(decodingStrategy: .caseByObjectProperty("type"), reporter: SafeDecodingErrorReporter.shared)
-enum MediaAssetKeyed {
+testDecoding(
+    MediaAssetNested.self,
+    input:
+        """
+        {
+            "placeholder": { }
+        }
+        """
+)
+
+testEncoding(input: MediaAssetNested.placeholder)
+
+@SafeDecoding(
+    decodingStrategy: .caseByObjectProperty("type"),
+    shouldImplementEncoding: true,
+    reporter: SafeDecodingErrorReporter.shared
+)
+enum MediaAssetKeyed: Codable {
     @CaseNameDecoding("ASSET/PROGRAMME")
     case vod(String?, String)
     @CaseNameDecoding("ASSET/SERIES")
@@ -205,3 +235,45 @@ testDecoding(
         }
         """
 )
+
+testEncoding(input: MediaAssetKeyed.placeholder)
+
+@SafeDecoding(
+    decodingStrategy: .natural,
+    shouldImplementEncoding: true
+)
+enum Chirality1: Int, Codable {
+    @CaseNameDecoding("ch-left")
+    case left
+    case right
+}
+
+@SafeDecoding(
+    decodingStrategy: .natural,
+    shouldImplementEncoding: true
+)
+enum Chirality2: Codable {
+    @CaseNameDecoding("ch-left")
+    case left
+    case right
+    case neutral
+}
+
+testDecoding(
+    Chirality1.self,
+    input: "\"ch-left\""
+)
+
+testDecoding(
+    Chirality1.self,
+    input: "1"
+)
+
+testEncoding(input: Chirality1.left)
+
+testDecoding(
+    Chirality2.self,
+    input: "\"ch-left\""
+)
+
+testEncoding(input: Chirality2.left)

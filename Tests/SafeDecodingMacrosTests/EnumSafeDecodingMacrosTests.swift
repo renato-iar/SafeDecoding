@@ -8,7 +8,8 @@ import XCTest
 import SafeDecodingMacros
 
 private let testMacros: [String: Macro.Type] = [
-    "EnumSafeDecoding": EnumSafeDecodingMacro.self
+    "EnumSafeDecoding": EnumSafeDecodingMacro.self,
+    "CaseNameDecoding": CaseNameDecodingMacro.self
 ]
 #endif
 
@@ -112,7 +113,7 @@ extension EnumSafeDecodingMacrosTests {
 }
 
 extension EnumSafeDecodingMacrosTests {
-    func testSafeDecodingOfEnumWithForCaseWithUnnamedStringPropertyWithoutReporting() throws {
+    func testSafeDecodingOfEnumWithCaseWithUnnamedStringPropertyWithoutReporting() throws {
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
@@ -162,7 +163,7 @@ extension EnumSafeDecodingMacrosTests {
 #endif
     }
 
-    func testSafeDecodingOfEnumWithForCaseWithUnnamedOptionalPropertyWithoutReporting() throws {
+    func testSafeDecodingOfEnumWithCaseWithUnnamedOptionalPropertyWithoutReporting() throws {
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
@@ -212,7 +213,7 @@ extension EnumSafeDecodingMacrosTests {
 #endif
     }
 
-    func testSafeDecodingOfEnumWithForCaseWithUnnamedArrayPropertyWithoutReporting() throws {
+    func testSafeDecodingOfEnumWithCaseWithUnnamedArrayPropertyWithoutReporting() throws {
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
@@ -262,7 +263,7 @@ extension EnumSafeDecodingMacrosTests {
 #endif
     }
 
-    func testSafeDecodingOfEnumWithForCaseWithUnnamedSetPropertyWithoutReporting() throws {
+    func testSafeDecodingOfEnumWithCaseWithUnnamedSetPropertyWithoutReporting() throws {
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
@@ -316,7 +317,7 @@ extension EnumSafeDecodingMacrosTests {
 #endif
     }
 
-    func testSafeDecodingOfEnumWithForCaseWithUnnamedDictionaryPropertyWithoutReporting() throws {
+    func testSafeDecodingOfEnumWithCaseWithUnnamedDictionaryPropertyWithoutReporting() throws {
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
@@ -370,7 +371,7 @@ extension EnumSafeDecodingMacrosTests {
 }
 
 extension EnumSafeDecodingMacrosTests {
-    func testSafeDecodingOfEnumWithForCaseWithUnnamedStringPropertyWithReporting() throws {
+    func testSafeDecodingOfEnumForCaseWithUnnamedStringPropertyWithReporting() throws {
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
@@ -425,7 +426,7 @@ extension EnumSafeDecodingMacrosTests {
 #endif
     }
 
-    func testSafeDecodingOfEnumWithForCaseWithUnnamedOptionalPropertyWithReporting() throws {
+    func testSafeDecodingOfEnumForCaseWithUnnamedOptionalPropertyWithReporting() throws {
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
@@ -480,7 +481,7 @@ extension EnumSafeDecodingMacrosTests {
 #endif
     }
 
-    func testSafeDecodingOfEnumWithForCaseWithUnnamedArrayPropertyWithReporting() throws {
+    func testSafeDecodingOfEnumForCaseWithUnnamedArrayPropertyWithReporting() throws {
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
@@ -546,7 +547,7 @@ extension EnumSafeDecodingMacrosTests {
 #endif
     }
 
-    func testSafeDecodingOfEnumWithForCaseWithUnnamedSetPropertyWithReporting() throws {
+    func testSafeDecodingOfEnumForCaseWithUnnamedSetPropertyWithReporting() throws {
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
@@ -612,7 +613,7 @@ extension EnumSafeDecodingMacrosTests {
 #endif
     }
 
-    func testSafeDecodingOfEnumWithForCaseWithUnnamedDictionaryPropertyWithReporting() throws {
+    func testSafeDecodingOfEnumForCaseWithUnnamedDictionaryPropertyWithReporting() throws {
 #if canImport(SafeDecodingMacros)
         assertMacroExpansion(
                 """
@@ -676,5 +677,121 @@ extension EnumSafeDecodingMacrosTests {
 #else
         throw XCTSkip("macros are only supported when running tests for the host platform")
 #endif
+    }
+
+    func testSafeDecodingOfEnumForNaturalStrategyWithRawValueType() throws {
+
+    #if canImport(SafeDecodingMacros)
+            assertMacroExpansion(
+                    """
+                    @EnumSafeDecoding(decodingStrategy: .natural, shouldImplementEncoding: true)
+                    enum Model: Int {
+                        @CaseNameDecoding("vd")
+                        case vod
+                        case bla
+                    }
+                    """,
+                    expandedSource:
+                    """
+
+                    enum Model: Int {
+                        case vod
+                        case bla
+                    }
+
+                    extension Model {
+                        init(from decoder: Decoder) throws {
+                            let container = try decoder.singleValueContainer()
+                            switch try? container.decode(String.self) {
+                            case "vd":
+                                self = .vod
+                                return
+                            default:
+                                break
+                            }
+                            if let `case` = Self.init(rawValue: try container.decode(Int .self)) {
+                                self = `case`
+                                return
+                            } else {
+                                throw DecodingError.typeMismatch(Model.self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: "Invalid number of keys found, expected one.", underlyingError: nil))
+                            }
+                        }
+                    }
+
+                    extension Model {
+                        func encode(to encoder: Encoder) throws {
+                            var container = encoder.singleValueContainer()
+                            switch self {
+                            case .vod:
+                                try container.encode("vd")
+                            case .bla:
+                                try container.encode(Self.bla.rawValue)
+                            }
+                        }
+                    }
+                    """,
+                    macros: testMacros
+            )
+    #else
+            throw XCTSkip("macros are only supported when running tests for the host platform")
+    #endif
+    }
+
+    func testSafeDecodingOfEnumForNaturalStrategyWithoutRawValueType() throws {
+
+    #if canImport(SafeDecodingMacros)
+            assertMacroExpansion(
+                    """
+                    @EnumSafeDecoding(decodingStrategy: .natural, shouldImplementEncoding: true)
+                    enum Model {
+                        @CaseNameDecoding("vd")
+                        case vod
+                        case bla
+                    }
+                    """,
+                    expandedSource:
+                    """
+
+                    enum Model {
+                        case vod
+                        case bla
+                    }
+
+                    extension Model {
+                        init(from decoder: Decoder) throws {
+                            let container = try decoder.singleValueContainer()
+                            switch try? container.decode(String.self) {
+                            case "vd":
+                                self = .vod
+                                return
+                            default:
+                                break
+                            }
+                            let rawCase = try container.decode(String.self)
+                            if rawCase == "bla" {
+                                self = .bla
+                                return
+                            }
+                            throw DecodingError.typeMismatch(Model.self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: "No matching decoding cases Model", underlyingError: nil))
+                        }
+                    }
+
+                    extension Model {
+                        func encode(to encoder: Encoder) throws {
+                            var container = encoder.singleValueContainer()
+                            switch self {
+                            case .vod:
+                                try container.encode("vd")
+                            case .bla:
+                                try container.encode("bla")
+                            }
+                        }
+                    }
+                    """,
+                    macros: testMacros
+            )
+    #else
+            throw XCTSkip("macros are only supported when running tests for the host platform")
+    #endif
     }
 }
