@@ -1,3 +1,4 @@
+import SwiftDiagnostics
 import SwiftSyntax
 import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
@@ -54,6 +55,68 @@ extension EnumSafeDecodingMacro: ExtensionMacro {
 
         let shouldImplementEncoding = shouldImplementEncoding(for: node)
         switch decodingStrategy(for: node) {
+        case .none:
+            let hasCaseWithParameter = cases.contains {
+                $0.elements.contains {
+                    $0.parameterClause?.parameters.isEmpty.not ?? false
+                }
+            }
+
+            if hasCaseWithParameter {
+                context.addDiagnostics(
+                    from: Errors.enumNaturalStrategyWithAssociatedValues,
+                    node: node
+                )
+            }
+
+            if reporter != nil {
+                let dignostic = Diagnostic.init(
+                    node: node,
+                    message: EnumDiagnosticMessage(
+                        message: "Reporter is not used for 'natural' safe-decoded enums",
+                        diagnosticID: MessageID(
+                            domain: "EnumSafeDecodingMacro",
+                            id: "diagnostics_bad_parameter"
+                        ),
+                        severity: .warning
+                    ),
+                    fixIts: []
+                )
+
+                context.diagnose(dignostic)
+            }
+
+            var rawValueType: TypeSyntax? = enumDecl.inheritanceClause?.inheritedTypes.first?.type
+
+            if rawValueType?.as(IdentifierTypeSyntax.self)?.name.text.in(Constants.supportedRawValueTypes) != true {
+                rawValueType = nil
+            }
+
+            let decoders = try decodePlain(
+                providingExtensionsOf: type,
+                for: enumDecl,
+                rawValueType: rawValueType,
+                cases: cases,
+                accessModifier: accessModifier,
+                conformingTo: protocols,
+                context: context
+            )
+
+            if shouldImplementEncoding {
+                let encoder = try encodePlain(
+                    providingExtensionsOf: type,
+                    for: enumDecl,
+                    rawValueType: rawValueType,
+                    cases: cases,
+                    accessModifier: accessModifier,
+                    context: context
+                )
+
+                return decoders + [encoder]
+            } else {
+                return decoders
+            }
+
         case .nested:
             let decoders = try decodeNestedObject(
                 providingExtensionsOf: type,
@@ -345,6 +408,115 @@ private extension EnumSafeDecodingMacro {
         ]
     }
 
+    static func decodePlain(
+        providingExtensionsOf type: some TypeSyntaxProtocol,
+        for enum: EnumDeclSyntax,
+        rawValueType: TypeSyntax?,
+        cases: [EnumCaseDeclSyntax],
+        accessModifier: String,
+        conformingTo protocols: [TypeSyntax],
+        context: some MacroExpansionContext
+    ) throws -> [ExtensionDeclSyntax] {
+        let initDecl = try InitializerDeclSyntax("\(raw: accessModifier)init(from decoder: Decoder) throws") {
+            CodeBlockItemListSyntax(
+                [
+                    CodeBlockItemSyntax(
+                        "let container = try decoder.singleValueContainer()"
+                    )
+                ]
+            )
+
+            var overridenCaseNames: [(String, String)] = []
+            var nonOverridenCaseNames: [String] = []
+
+            let _ = cases.forEach { `case` in
+
+                let caseNameOverride = Self.caseNameOverride(for: `case`)
+                var elements = `case`.elements.map(\.name.text)
+
+                guard !elements.isEmpty else { return }
+
+                if let caseNameOverride {
+                    overridenCaseNames.append((elements[0], caseNameOverride))
+                    elements.remove(at: .zero)
+                }
+
+                nonOverridenCaseNames.append(contentsOf: elements)
+            }
+
+            if !overridenCaseNames.isEmpty {
+                try SwitchExprSyntax("switch try? container.decode(String.self)") {
+                    for (caseName, overrideCaseName) in overridenCaseNames {
+                        SwitchCaseSyntax("case \"\(raw: overrideCaseName)\":") {
+                            CodeBlockItemListSyntax {
+                                CodeBlockItemSyntax("self = .\(raw: caseName)")
+                                CodeBlockItemSyntax("return")
+                            }
+                        }
+                    }
+
+                    SwitchCaseSyntax("default:") {
+                        CodeBlockItemSyntax("break")
+                    }
+                }
+            }
+
+            if !nonOverridenCaseNames.isEmpty {
+                if let rawValueType {
+                    CodeBlockItemSyntax(
+                        """
+                        if let `case` = Self.init(rawValue: try container.decode(\(rawValueType).self)) {
+                            self = `case`
+                            return
+                        } else {
+                            throw DecodingError.typeMismatch(\(type).self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: "Invalid number of keys found, expected one.", underlyingError: nil))
+                        }
+                        """
+                    )
+                } else {
+                    CodeBlockItemSyntax(
+                        """
+                        let rawCase = try container.decode(String.self)
+                        """
+                    )
+
+                    for caseName in nonOverridenCaseNames {
+                        CodeBlockItemSyntax(
+                            """
+                            if rawCase == \"\(raw: caseName)\" {
+                                self = .\(raw: caseName)
+                                return
+                            }
+                            """
+                        )
+                    }
+
+                    CodeBlockItemSyntax(
+                        "throw DecodingError.typeMismatch(\(type).self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: \"No matching decoding cases \(type)\", underlyingError: nil))"
+                    )
+                }
+            } else {
+                CodeBlockItemSyntax(
+                    "throw DecodingError.typeMismatch(\(type).self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: \"No matching decoding cases \(type)\", underlyingError: nil))"
+                )
+            }
+        }
+
+        let `extension` = try ExtensionDeclSyntax(
+            SyntaxUtils.isMissingConformanceToDecodable(conformances: protocols) ?
+                "extension \(type): Decodable" :
+                "extension \(type)"
+        ) {
+            MemberBlockItemListSyntax(
+                [
+                    MemberBlockItemSyntax(decl: initDecl)
+                ]
+            )
+        }
+
+        return [`extension`]
+    }
+
     static func decode(
         element: EnumCaseElementListSyntax.Element,
         rootCodingKeysName: String
@@ -486,11 +658,49 @@ private extension EnumSafeDecodingMacro {
             }
         }
     }
+
+    static func encodePlain(
+        providingExtensionsOf type: some TypeSyntaxProtocol,
+        for enum: EnumDeclSyntax,
+        rawValueType: TypeSyntax?,
+        cases: [EnumCaseDeclSyntax],
+        accessModifier: String,
+        context: some MacroExpansionContext
+    ) throws -> ExtensionDeclSyntax {
+        return try ExtensionDeclSyntax("extension \(type)") {
+            try FunctionDeclSyntax("\(raw: accessModifier)func encode(to encoder: Encoder) throws") {
+                CodeBlockItemSyntax("var container = encoder.singleValueContainer()")
+
+                try SwitchExprSyntax("switch self") {
+                    for `case` in cases {
+                        let caseNameOverride = Self.caseNameOverride(for: `case`)
+
+                        for (index, caseElement) in `case`.elements.enumerated() {
+                            if index == .zero, let caseNameOverride {
+                                SwitchCaseSyntax("case .\(raw: caseElement.name.text):") {
+                                    CodeBlockItemSyntax("try container.encode(\"\(raw: caseNameOverride)\")")
+                                }
+                            } else if rawValueType != nil {
+                                SwitchCaseSyntax("case .\(raw: caseElement.name.text):") {
+                                    CodeBlockItemSyntax("try container.encode(Self.\(raw: caseElement.name.text).rawValue)")
+                                }
+                            } else {
+                                SwitchCaseSyntax("case .\(raw: caseElement.name.text):") {
+                                    CodeBlockItemSyntax("try container.encode(\"\(raw: caseElement.name.text)\")")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 // MARK: - Decoders -
 
 private extension EnumSafeDecodingMacro {
+
     static func decode(
         parameter: EnumCaseParameterSyntax,
         at index: Int,
@@ -767,18 +977,10 @@ private extension EnumSafeDecodingMacro {
     }
 }
 
-// MARK: - Encoders
-
-private extension EnumSafeDecodingMacro {
-    
-}
-
 // MARK: - Utils
 
 private extension EnumSafeDecodingMacro {
-    static func caseNameOverride(
-        for case: EnumCaseDeclSyntax
-    ) -> String? {
+    static func caseNameOverride(for case: EnumCaseDeclSyntax) -> String? {
         `case`
             .attributes
             .first { attribute in
@@ -805,9 +1007,46 @@ private extension EnumSafeDecodingMacro {
             }
     }
 
-    static func decodingStrategy(
-        for attribute: AttributeSyntax
-    ) -> DecodingStrategy {
+    static func decodingStrategy(for attribute: AttributeSyntax) -> DecodingStrategy {
+        if case let .argumentList(arguments) = attribute.arguments {
+            for argument in arguments where argument.label?.text == "decodingStrategy" {
+                if
+                    let functionCall = argument
+                        .expression
+                        .as(FunctionCallExprSyntax.self),
+                    functionCall
+                        .calledExpression
+                        .as(MemberAccessExprSyntax.self)?
+                        .declName
+                        .baseName
+                        .text == "caseByObjectProperty",
+                    let caseName = functionCall
+                        .arguments
+                        .first?
+                        .expression
+                        .as(StringLiteralExprSyntax.self)?
+                        .segments
+                        .first?
+                        .as(StringSegmentSyntax.self)?
+                        .content
+                        .text
+                {
+                    return .property(name: caseName)
+                } else if let memberAccess = argument.expression.as(MemberAccessExprSyntax.self) {
+                    let name = memberAccess.declName.baseName.text
+
+                    if name == "caseByNestedObject" { return .nested }
+
+                    if name == "natural" { return .none }
+                }
+            }
+
+            return .nested
+        } else {
+            return .nested
+        }
+
+        /*
         if let caseSwitchingPropertyName = attribute
             .arguments?
             .as(LabeledExprListSyntax.self)?
@@ -844,11 +1083,10 @@ private extension EnumSafeDecodingMacro {
         }
 
         return .nested
+        */
     }
 
-    static func shouldImplementEncoding(
-        for attribute: AttributeSyntax
-    ) -> Bool {
+    static func shouldImplementEncoding(for attribute: AttributeSyntax) -> Bool {
         if let shouldImplementEncoding = attribute
             .arguments?
             .as(LabeledExprListSyntax.self)?
@@ -876,6 +1114,7 @@ private extension EnumSafeDecodingMacro {
     enum DecodingStrategy {
         case nested
         case property(name: String)
+        case none
     }
 }
 
@@ -885,14 +1124,37 @@ private extension EnumSafeDecodingMacro {
     enum Errors: Error, CustomStringConvertible {
         case onlyApplicableToEnumTypes
         case invalidCaseName
+        case enumNaturalStrategyWithAssociatedValues
         case unexpectedError
 
         var description: String {
             switch self {
             case .onlyApplicableToEnumTypes: "EnumSafeDecodingMacro is only applicable to enums"
             case .invalidCaseName: "Case name is missing or invalid"
+            case .enumNaturalStrategyWithAssociatedValues: "Found case(s) with associated values while using natural decoding strategy"
             case .unexpectedError: "Unexpected error"
             }
         }
+    }
+
+    struct EnumDiagnosticMessage: DiagnosticMessage {
+        let message: String
+        let diagnosticID: MessageID
+        let severity: DiagnosticSeverity
+    }
+}
+
+// MARK: - Constants
+
+private extension EnumSafeDecodingMacro {
+    enum Constants {
+        static let supportedRawValueTypes = [
+            "String",
+            "Character",
+            "Int",
+            "UInt",
+            "Double",
+            "Float"
+        ]
     }
 }
