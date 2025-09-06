@@ -4,7 +4,7 @@ import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
 
 /**
- Implements safe decoding for `struct`s
+ Implements safe decoding for `enum`s
 
  The `EnumSafeDecodingMacro` will add conformance to `Decodable` and custom-implement
  its initializer. For all properties suitable properties it will implement custom, safe decoding.
@@ -13,9 +13,23 @@ import SwiftSyntaxMacros
  Error reporting can be added to the macro declaration; the reporter must conform to the `SafeDecodingReporter` protocol.
 
  Individual properties can be decorated with macros to enhance decoding. Namely:
-    - `IgnoreSafeDecoding` will prevent safe decoding to be applyed to a property
-    - `@FallbackDecoding` will add a fallback value for the decoding process that will be used if decoding/retries fail
-    - `@RetryDecoding` adds retries, where decoding will be performed for the specified type and then mapped to the property's type, if possible
+    - `CaseNameDecoding` allows the overriding of the case name of the associated coding key, or the decoding value for "natural" decoding
+
+ The use of `CaseNameDecoding` can not only override coding-key raw value or underlying decodable string, but allow mixed-value decoding for natural decoding.
+ Namely, if an enum has a raw value of a type other than string, but `CaseNameDecoding` is used on one of the cases, the decoder will use the overriden name as the raw value.
+ E.g.
+
+ ```
+ @SafeDecoding(decodingStrategy: .natural)
+ enum Example: Int {
+ case one
+ case another
+ @CaseNameDecoding("yet-another")
+ case yetAnother
+ }
+ ```
+
+ The decoder will attempt to get a 0/1 for cases .one/.another, respectively, but will attempt to decode the string "yet-another" for .yetAnother.
  */
 public enum EnumSafeDecodingMacro {}
 
@@ -46,6 +60,36 @@ extension EnumSafeDecodingMacro: ExtensionMacro {
                     .decl
                     .as(EnumCaseDeclSyntax.self)
             })
+
+        let fallbacks = cases
+            .compactMap { `case` -> String? in
+                let hasFallback = `case`
+                    .attributes
+                    .contains { attribute in
+                        attribute
+                            .as(AttributeSyntax.self)?
+                            .attributeName.as(IdentifierTypeSyntax.self)?
+                            .name
+                            .text  == "FallbackCaseDecoding"
+                    }
+
+                if hasFallback {
+                    return `case`.elements.first?.name.text
+                } else {
+                    return nil
+                }
+            }
+
+        if fallbacks.count > 1 {
+            context.addDiagnostics(
+                from: Errors.invalidMultipleFallbackEnumCases(cases: fallbacks),
+                node: declaration
+            )
+
+            return []
+        }
+
+        let fallback = fallbacks.first
         let accessModifier = if let accessControl = SyntaxUtils.accessControl(decl: declaration) {
             accessControl.rawValue + " "
         } else {
@@ -69,11 +113,11 @@ extension EnumSafeDecodingMacro: ExtensionMacro {
                 )
             }
 
-            if reporter != nil {
+            if reporter != nil, fallback == nil {
                 let dignostic = Diagnostic.init(
                     node: node,
                     message: EnumDiagnosticMessage(
-                        message: "Reporter is not used for 'natural' safe-decoded enums",
+                        message: "Reporter is not used for 'natural' safe-decoded enums, unless a fallback is defined",
                         diagnosticID: MessageID(
                             domain: "EnumSafeDecodingMacro",
                             id: "diagnostics_bad_parameter"
@@ -99,7 +143,9 @@ extension EnumSafeDecodingMacro: ExtensionMacro {
                 cases: cases,
                 accessModifier: accessModifier,
                 conformingTo: protocols,
-                context: context
+                context: context,
+                reporter: reporter,
+                fallback: fallback
             )
 
             if shouldImplementEncoding {
@@ -125,7 +171,8 @@ extension EnumSafeDecodingMacro: ExtensionMacro {
                 accessModifier: accessModifier,
                 conformingTo: protocols,
                 context: context,
-                reporter: reporter
+                reporter: reporter,
+                fallback: fallback
             )
 
             if shouldImplementEncoding {
@@ -151,7 +198,8 @@ extension EnumSafeDecodingMacro: ExtensionMacro {
                 accessModifier: accessModifier,
                 conformingTo: protocols,
                 context: context,
-                reporter: reporter
+                reporter: reporter,
+                fallback: fallback
             )
 
             if shouldImplementEncoding {
@@ -186,7 +234,8 @@ private extension EnumSafeDecodingMacro {
         accessModifier: String,
         conformingTo protocols: [TypeSyntax],
         context: some MacroExpansionContext,
-        reporter: ExprSyntax?
+        reporter: ExprSyntax?,
+        fallback: String?
     ) throws -> [ExtensionDeclSyntax] {
         let enumTypeName = `enum`.name.text
         let rootCodingKeysName = "CodingKeys"
@@ -275,21 +324,66 @@ private extension EnumSafeDecodingMacro {
             }
 
             // Initializer
-            MemberBlockItemListSyntax(
-                """
-                \(raw: accessModifier)init(from decoder: Decoder) throws {
-                    let container = try decoder.container(keyedBy: \(raw: rootCodingKeysName).self)
-                    var allKeys = ArraySlice(container.allKeys)
-                    guard let onlyKey = allKeys.popFirst(), allKeys.isEmpty else {
-                        throw DecodingError.typeMismatch(\(type).self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: "Invalid number of keys found, expected one.", underlyingError: nil))
-                    }
-
-                    switch onlyKey {
-                    \(raw: cases.map(caseDecoding(for:)).flatMap { $0 }.joined(separator: "\n"))
-                    }
+            if let fallback {
+                if let reporter {
+                    MemberBlockItemListSyntax(
+                        """
+                        \(raw: accessModifier)init(from decoder: Decoder) throws {
+                            do {
+                                let container = try decoder.container(keyedBy: \(raw: rootCodingKeysName).self)
+                                var allKeys = ArraySlice(container.allKeys)
+                                guard let onlyKey = allKeys.popFirst(), allKeys.isEmpty else {
+                                    throw DecodingError.typeMismatch(\(type).self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: "Invalid number of keys found, expected one.", underlyingError: nil))
+                                }
+                        
+                                switch onlyKey {
+                                \(raw: cases.map(caseDecoding(for:)).flatMap { $0 }.joined(separator: "\n"))
+                                }
+                            } catch {
+                                (\(reporter)).report(error: error, decoding: "\(raw: enumTypeName).self")
+                                self = .\(raw: fallback)
+                            }
+                        }
+                        """
+                    )
+                } else {
+                    MemberBlockItemListSyntax(
+                        """
+                        \(raw: accessModifier)init(from decoder: Decoder) throws {
+                            do {
+                                let container = try decoder.container(keyedBy: \(raw: rootCodingKeysName).self)
+                                var allKeys = ArraySlice(container.allKeys)
+                                guard let onlyKey = allKeys.popFirst(), allKeys.isEmpty else {
+                                    throw DecodingError.typeMismatch(\(type).self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: "Invalid number of keys found, expected one.", underlyingError: nil))
+                                }
+                        
+                                switch onlyKey {
+                                \(raw: cases.map(caseDecoding(for:)).flatMap { $0 }.joined(separator: "\n"))
+                                }
+                            } catch {
+                                self = .\(raw: fallback)
+                            }
+                        }
+                        """
+                    )
                 }
-                """
-            )
+            } else {
+                MemberBlockItemListSyntax(
+                    """
+                    \(raw: accessModifier)init(from decoder: Decoder) throws {
+                        let container = try decoder.container(keyedBy: \(raw: rootCodingKeysName).self)
+                        var allKeys = ArraySlice(container.allKeys)
+                        guard let onlyKey = allKeys.popFirst(), allKeys.isEmpty else {
+                            throw DecodingError.typeMismatch(\(type).self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: "Invalid number of keys found, expected one.", underlyingError: nil))
+                        }
+
+                        switch onlyKey {
+                        \(raw: cases.map(caseDecoding(for:)).flatMap { $0 }.joined(separator: "\n"))
+                        }
+                    }
+                    """
+                )
+            }
         }
 
         return [
@@ -305,7 +399,8 @@ private extension EnumSafeDecodingMacro {
         accessModifier: String,
         conformingTo protocols: [TypeSyntax],
         context: some MacroExpansionContext,
-        reporter: ExprSyntax?
+        reporter: ExprSyntax?,
+        fallback: String?
     ) throws -> [ExtensionDeclSyntax] {
         let plainCasingPropertyName = casingPropertyName.plain
         let enumTypeName = `enum`.name.text
@@ -392,15 +487,48 @@ private extension EnumSafeDecodingMacro {
                 }
             }
 
-            MemberBlockItemListSyntax(
-                """
-                \(raw: accessModifier)init(from decoder: Decoder) throws {
-                    switch try decoder.container(keyedBy: \(raw: rootCodingKeysName).self).decode(CasingKeys.self, forKey: .\(raw: plainCasingPropertyName)) {
-                    \(raw: cases.map(caseDecoding(for:)).flatMap { $0 }.joined(separator: "\n"))
-                    }
+            if let fallback {
+                if let reporter {
+                    MemberBlockItemListSyntax(
+                        """
+                        \(raw: accessModifier)init(from decoder: Decoder) throws {
+                            do {
+                                switch try decoder.container(keyedBy: \(raw: rootCodingKeysName).self).decode(CasingKeys.self, forKey: .\(raw: plainCasingPropertyName)) {
+                                \(raw: cases.map(caseDecoding(for:)).flatMap { $0 }.joined(separator: "\n"))
+                                }
+                            } catch {
+                                (\(reporter)).report(error: error, in: \(raw: enumTypeName).self)
+                                self = .\(raw: fallback)
+                            }
+                        }
+                        """
+                    )
+                } else {
+                    MemberBlockItemListSyntax(
+                        """
+                        \(raw: accessModifier)init(from decoder: Decoder) throws {
+                            do {
+                                switch try decoder.container(keyedBy: \(raw: rootCodingKeysName).self).decode(CasingKeys.self, forKey: .\(raw: plainCasingPropertyName)) {
+                                \(raw: cases.map(caseDecoding(for:)).flatMap { $0 }.joined(separator: "\n"))
+                                }
+                            } catch {
+                                self = .\(raw: fallback)
+                            }
+                        }
+                        """
+                    )
                 }
-                """
-            )
+            } else {
+                MemberBlockItemListSyntax(
+                    """
+                    \(raw: accessModifier)init(from decoder: Decoder) throws {
+                        switch try decoder.container(keyedBy: \(raw: rootCodingKeysName).self).decode(CasingKeys.self, forKey: .\(raw: plainCasingPropertyName)) {
+                        \(raw: cases.map(caseDecoding(for:)).flatMap { $0 }.joined(separator: "\n"))
+                        }
+                    }
+                    """
+                )
+            }
         }
 
         return [
@@ -415,9 +543,127 @@ private extension EnumSafeDecodingMacro {
         cases: [EnumCaseDeclSyntax],
         accessModifier: String,
         conformingTo protocols: [TypeSyntax],
-        context: some MacroExpansionContext
+        context: some MacroExpansionContext,
+        reporter: ExprSyntax?,
+        fallback: String?
     ) throws -> [ExtensionDeclSyntax] {
+        let enumTypeName = `enum`.name.text
+        var overridenCaseNames: [(String, String)] = []
+        var nonOverridenCaseNames: [String] = []
+
+        let _ = cases.forEach { `case` in
+
+            let caseNameOverride = Self.caseNameOverride(for: `case`)
+            var elements = `case`.elements.map(\.name.text)
+
+            guard !elements.isEmpty else { return }
+
+            if let caseNameOverride {
+                overridenCaseNames.append((elements[0], caseNameOverride))
+                elements.remove(at: .zero)
+            }
+
+            nonOverridenCaseNames.append(contentsOf: elements)
+        }
+
+        func decoderBlock() throws -> CodeBlockItemListSyntax {
+            var items: [CodeBlockItemSyntax] = []
+
+            items.append("let container = try decoder.singleValueContainer()")
+
+            if
+                !overridenCaseNames.isEmpty,
+                let switchStatement = CodeBlockItemSyntax(
+                    try SwitchExprSyntax("switch try? container.decode(String.self)") {
+                        for (caseName, overrideCaseName) in overridenCaseNames {
+                            SwitchCaseSyntax("case \"\(raw: overrideCaseName)\":") {
+                                CodeBlockItemListSyntax {
+                                    CodeBlockItemSyntax("self = .\(raw: caseName)")
+                                    CodeBlockItemSyntax("return")
+                                }
+                            }
+                        }
+
+                        SwitchCaseSyntax("default:") {
+                            CodeBlockItemSyntax("break")
+                        }
+                    }
+                )
+            {
+                items.append(
+                    switchStatement
+                )
+            }
+
+            if !nonOverridenCaseNames.isEmpty {
+                if let rawValueType {
+                    items.append(
+                        """
+                        if let `case` = Self.init(rawValue: try container.decode(\(rawValueType).self)) {
+                            self = `case`
+                            return
+                        } else {
+                            throw DecodingError.typeMismatch(\(type).self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: "Invalid number of keys found, expected one.", underlyingError: nil))
+                        }
+                        """
+                    )
+                } else {
+                    items.append(
+                        """
+                        let rawCase = try container.decode(String.self)
+                        """
+                    )
+
+                    for caseName in nonOverridenCaseNames {
+                        items.append(
+                            """
+                            if rawCase == \"\(raw: caseName)\" {
+                                self = .\(raw: caseName)
+                                return
+                            }
+                            """
+                        )
+                    }
+
+                    items.append(
+                        "throw DecodingError.typeMismatch(\(type).self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: \"No matching decoding cases \(type)\", underlyingError: nil))"
+                    )
+                }
+            } else {
+                items.append(
+                    "throw DecodingError.typeMismatch(\(type).self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: \"No matching decoding cases \(type)\", underlyingError: nil))"
+                )
+            }
+
+            return CodeBlockItemListSyntax(items)
+        }
+
         let initDecl = try InitializerDeclSyntax("\(raw: accessModifier)init(from decoder: Decoder) throws") {
+            let decoder = try decoderBlock()
+
+            if let fallback {
+                CodeBlockItemListSyntax {
+                    DoStmtSyntax(
+                        body: CodeBlockSyntax(statements: decoder),
+                        catchClauses: [
+                            CatchClauseSyntax("catch") {
+                                CodeBlockItemListSyntax(
+                                    "self = .\(raw: fallback)"
+                                )
+
+                                if let reporter {
+                                    CodeBlockItemListSyntax(
+                                        "(\(reporter)).report(error: error, in: \(raw: enumTypeName).self)"
+                                    )
+                                }
+                            }
+                        ]
+                    )
+                }
+            } else {
+                try decoderBlock()
+            }
+            /*
             CodeBlockItemListSyntax(
                 [
                     CodeBlockItemSyntax(
@@ -425,24 +671,6 @@ private extension EnumSafeDecodingMacro {
                     )
                 ]
             )
-
-            var overridenCaseNames: [(String, String)] = []
-            var nonOverridenCaseNames: [String] = []
-
-            let _ = cases.forEach { `case` in
-
-                let caseNameOverride = Self.caseNameOverride(for: `case`)
-                var elements = `case`.elements.map(\.name.text)
-
-                guard !elements.isEmpty else { return }
-
-                if let caseNameOverride {
-                    overridenCaseNames.append((elements[0], caseNameOverride))
-                    elements.remove(at: .zero)
-                }
-
-                nonOverridenCaseNames.append(contentsOf: elements)
-            }
 
             if !overridenCaseNames.isEmpty {
                 try SwitchExprSyntax("switch try? container.decode(String.self)") {
@@ -500,6 +728,7 @@ private extension EnumSafeDecodingMacro {
                     "throw DecodingError.typeMismatch(\(type).self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: \"No matching decoding cases \(type)\", underlyingError: nil))"
                 )
             }
+            */
         }
 
         let `extension` = try ExtensionDeclSyntax(
@@ -1125,6 +1354,7 @@ private extension EnumSafeDecodingMacro {
         case onlyApplicableToEnumTypes
         case invalidCaseName
         case enumNaturalStrategyWithAssociatedValues
+        case invalidMultipleFallbackEnumCases(cases: [String])
         case unexpectedError
 
         var description: String {
@@ -1132,6 +1362,7 @@ private extension EnumSafeDecodingMacro {
             case .onlyApplicableToEnumTypes: "EnumSafeDecodingMacro is only applicable to enums"
             case .invalidCaseName: "Case name is missing or invalid"
             case .enumNaturalStrategyWithAssociatedValues: "Found case(s) with associated values while using natural decoding strategy"
+            case .invalidMultipleFallbackEnumCases(let cases): "Multiple instances of @FallbackCaseDecoding are illegal: \(cases.map { "case \($0)" }.joined(separator: ", "))"
             case .unexpectedError: "Unexpected error"
             }
         }

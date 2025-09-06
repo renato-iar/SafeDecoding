@@ -21,6 +21,10 @@ class MockReporter: SafeDecodingReporter {
         interceptor?.report(error: error, decoding: itemType, forKey: key, of: propertyName, in: containerType)
     }
 
+    func report<Container>(error: any Error, in containerType: Container.Type) {
+        interceptor?.report(error: error, in: containerType)
+    }
+
     private init() { }
 
     static let shared = MockReporter()

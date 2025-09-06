@@ -6,6 +6,7 @@ class MockReporterInterceptor: SafeDecodingReporter {
     var didCallReportErrorForItemAtIndexOfPropertyNameInContainer: [(index: Int, propertyName: String)] = []
     var didCallReportErrorForItemOfPropertyNameInContainer: [String] = []
     var didCallReportErrorForItemWithKeyOrPropertyNameInContainer: [(key: String, propertyName: String)] = []
+    var didCallReportErrorInContainerType: Int = .zero
 
     func clear() {
         didCallReportErrorOfPropertyNameInContainer = []
@@ -28,5 +29,9 @@ class MockReporterInterceptor: SafeDecodingReporter {
 
     func report<Container, Key, Item>(error: Error, decoding itemType: Item.Type, forKey key: Key, of propertyName: String, in containerType: Container.Type) where Key : Hashable {
         didCallReportErrorForItemWithKeyOrPropertyNameInContainer.append(("\(key)", propertyName))
+    }
+
+    func report<Container>(error: any Error, in containerType: Container.Type) {
+        didCallReportErrorInContainerType += 1
     }
 }
