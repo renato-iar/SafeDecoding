@@ -321,9 +321,6 @@ private extension ClassOrStructSafeDecodingMacro {
         accessModifier: String,
         context: some MacroExpansionContext
     ) throws -> ExtensionDeclSyntax {
-        for (element, _, _, _, _, _) in notComputedNonInitializedTypeProperties {
-            dump(element)
-        }
         return try ExtensionDeclSyntax("extension \(type)") {
             try FunctionDeclSyntax("\(raw: accessModifier) func encode(to encoder: Encoder) throws") {
                 CodeBlockItemListSyntax("var container = encoder.container(keyedBy: CodingKeys.self)")

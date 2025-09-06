@@ -79,4 +79,19 @@ public protocol SafeDecodingReporter {
         of propertyName: String,
         in containerType: Container.Type
     )
+
+    /**
+     Called when an error occurs (and is recovered from) while decoding a `natural` enum.
+
+     When attempting to decode an enumeration case,
+     if all code paths fail and a call to ``FallbackCaseDecoding`` exists.
+
+     - parameters:
+        - error: The error thrown during decoding
+        - containerType: The actual type of the enumeration
+     */
+    func report<Container>(
+        error: Error,
+        in containerType: Container.Type
+    )
 }

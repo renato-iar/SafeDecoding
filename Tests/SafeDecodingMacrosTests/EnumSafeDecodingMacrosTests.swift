@@ -9,7 +9,8 @@ import SafeDecodingMacros
 
 private let testMacros: [String: Macro.Type] = [
     "EnumSafeDecoding": EnumSafeDecodingMacro.self,
-    "CaseNameDecoding": CaseNameDecodingMacro.self
+    "CaseNameDecoding": CaseNameDecodingMacro.self,
+    "FallbackCaseDecoding": FallbackCaseDecodingMacro.self
 ]
 #endif
 
@@ -382,11 +383,11 @@ extension EnumSafeDecodingMacrosTests {
                 """,
                 expandedSource:
                 """
-
+                
                 enum Model {
                     case vod(String)
                 }
-
+                
                 extension Model {
                     private enum CodingKeys: String, CodingKey {
                         case vod
@@ -411,7 +412,7 @@ extension EnumSafeDecodingMacrosTests {
                         guard let onlyKey = allKeys.popFirst(), allKeys.isEmpty else {
                             throw DecodingError.typeMismatch(Model.self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: "Invalid number of keys found, expected one.", underlyingError: nil))
                         }
-
+                
                         switch onlyKey {
                         case .vod:
                             self = try Self.decode_vod(container: container.nestedContainer(keyedBy: CodingKeys_vod.self, forKey: .vod))
@@ -437,11 +438,11 @@ extension EnumSafeDecodingMacrosTests {
                 """,
                 expandedSource:
                 """
-
+                
                 enum Model {
                     case vod(String?)
                 }
-
+                
                 extension Model {
                     private enum CodingKeys: String, CodingKey {
                         case vod
@@ -466,7 +467,7 @@ extension EnumSafeDecodingMacrosTests {
                         guard let onlyKey = allKeys.popFirst(), allKeys.isEmpty else {
                             throw DecodingError.typeMismatch(Model.self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: "Invalid number of keys found, expected one.", underlyingError: nil))
                         }
-
+                
                         switch onlyKey {
                         case .vod:
                             self = try Self.decode_vod(container: container.nestedContainer(keyedBy: CodingKeys_vod.self, forKey: .vod))
@@ -492,11 +493,11 @@ extension EnumSafeDecodingMacrosTests {
                 """,
                 expandedSource:
                 """
-
+                
                 enum Model {
                     case vod([Bool])
                 }
-
+                
                 extension Model {
                     private enum CodingKeys: String, CodingKey {
                         case vod
@@ -511,7 +512,7 @@ extension EnumSafeDecodingMacrosTests {
                         do {
                             let decodedArray = try container.decode([SafeDecodable<Bool>].self, forKey: ._0)
                             var items: [Bool] = []
-
+                
                             for (index, item) in decodedArray.enumerated() {
                                 if let decoded = item.decoded {
                                     items.append(decoded)
@@ -519,7 +520,7 @@ extension EnumSafeDecodingMacrosTests {
                                     sampleReporter.report(error: error, decoding: Bool.self, at: index, of: "vod._0", in: Model.self)
                                 }
                             }
-
+                
                             return items
                         } catch {
                             sampleReporter.report(error: error, of: "vod._0", decoding: [Bool].self, in: Model.self)
@@ -532,7 +533,7 @@ extension EnumSafeDecodingMacrosTests {
                         guard let onlyKey = allKeys.popFirst(), allKeys.isEmpty else {
                             throw DecodingError.typeMismatch(Model.self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: "Invalid number of keys found, expected one.", underlyingError: nil))
                         }
-
+                
                         switch onlyKey {
                         case .vod:
                             self = try Self.decode_vod(container: container.nestedContainer(keyedBy: CodingKeys_vod.self, forKey: .vod))
@@ -558,11 +559,11 @@ extension EnumSafeDecodingMacrosTests {
                 """,
                 expandedSource:
                 """
-
+                
                 enum Model {
                     case vod(Set<Bool>)
                 }
-
+                
                 extension Model {
                     private enum CodingKeys: String, CodingKey {
                         case vod
@@ -577,7 +578,7 @@ extension EnumSafeDecodingMacrosTests {
                         do {
                             let decodedArray = try container.decode([SafeDecodable<Bool>].self, forKey: ._0)
                             var items: Set<Bool> = []
-
+                
                             for (index, item) in decodedArray.enumerated() {
                                 if let decoded = item.decoded {
                                     items.insert(decoded)
@@ -585,7 +586,7 @@ extension EnumSafeDecodingMacrosTests {
                                     sampleReporter.report(error: error, decoding: Bool.self, at: index, of: "vod._0", in: Model.self)
                                 }
                             }
-
+                
                             return items
                         } catch {
                             sampleReporter.report(error: error, of: "vod._0", decoding: [Bool].self, in: Model.self)
@@ -598,7 +599,7 @@ extension EnumSafeDecodingMacrosTests {
                         guard let onlyKey = allKeys.popFirst(), allKeys.isEmpty else {
                             throw DecodingError.typeMismatch(Model.self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: "Invalid number of keys found, expected one.", underlyingError: nil))
                         }
-
+                
                         switch onlyKey {
                         case .vod:
                             self = try Self.decode_vod(container: container.nestedContainer(keyedBy: CodingKeys_vod.self, forKey: .vod))
@@ -624,11 +625,11 @@ extension EnumSafeDecodingMacrosTests {
                 """,
                 expandedSource:
                 """
-
+                
                 enum Model {
                     case vod([String: Bool])
                 }
-
+                
                 extension Model {
                     private enum CodingKeys: String, CodingKey {
                         case vod
@@ -643,7 +644,7 @@ extension EnumSafeDecodingMacrosTests {
                         do {
                             let decodedItems = try container.decode([String: SafeDecodable<Bool>].self, forKey: ._0)
                             var items: [String: Bool] = [:]
-
+                
                             for (key, value) in decodedItems {
                                 if let decoded = value.decoded {
                                     items[key] = decoded
@@ -651,7 +652,7 @@ extension EnumSafeDecodingMacrosTests {
                                     sampleReporter.report(error: error, decoding: Bool.self, forKey: key, of: "vod._0", in: Model.self)
                                 }
                             }
-
+                
                             return items
                         } catch {
                             sampleReporter.report(error: error, of: "vod._0", decoding: [String: SafeDecodable<Bool>].self, in: Model.self)
@@ -664,7 +665,7 @@ extension EnumSafeDecodingMacrosTests {
                         guard let onlyKey = allKeys.popFirst(), allKeys.isEmpty else {
                             throw DecodingError.typeMismatch(Model.self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: "Invalid number of keys found, expected one.", underlyingError: nil))
                         }
-
+                
                         switch onlyKey {
                         case .vod:
                             self = try Self.decode_vod(container: container.nestedContainer(keyedBy: CodingKeys_vod.self, forKey: .vod))
@@ -681,8 +682,8 @@ extension EnumSafeDecodingMacrosTests {
 
     func testSafeDecodingOfEnumForNaturalStrategyWithRawValueType() throws {
 
-    #if canImport(SafeDecodingMacros)
-            assertMacroExpansion(
+#if canImport(SafeDecodingMacros)
+        assertMacroExpansion(
                     """
                     @EnumSafeDecoding(decodingStrategy: .natural, shouldImplementEncoding: true)
                     enum Model: Int {
@@ -693,12 +694,12 @@ extension EnumSafeDecodingMacrosTests {
                     """,
                     expandedSource:
                     """
-
+                    
                     enum Model: Int {
                         case vod
                         case bla
                     }
-
+                    
                     extension Model {
                         init(from decoder: Decoder) throws {
                             let container = try decoder.singleValueContainer()
@@ -714,6 +715,122 @@ extension EnumSafeDecodingMacrosTests {
                                 return
                             } else {
                                 throw DecodingError.typeMismatch(Model.self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: "Invalid number of keys found, expected one.", underlyingError: nil))
+                            }
+                        }
+                    }
+                    
+                    extension Model {
+                        func encode(to encoder: Encoder) throws {
+                            var container = encoder.singleValueContainer()
+                            switch self {
+                            case .vod:
+                                try container.encode("vd")
+                            case .bla:
+                                try container.encode(Self.bla.rawValue)
+                            }
+                        }
+                    }
+                    """,
+                    macros: testMacros
+        )
+#else
+        throw XCTSkip("macros are only supported when running tests for the host platform")
+#endif
+    }
+
+    func testSafeDecodingOfEnumForNaturalStrategyWithoutRawValueType() throws {
+
+#if canImport(SafeDecodingMacros)
+        assertMacroExpansion(
+                    """
+                    @EnumSafeDecoding(decodingStrategy: .natural, shouldImplementEncoding: true)
+                    enum Model {
+                        @CaseNameDecoding("vd")
+                        case vod
+                        @FallbackCaseDecoding
+                        case bla
+                    }
+                    """,
+                    expandedSource:
+                    """
+                    
+                    enum Model {
+                        case vod
+                        case bla
+                    }
+                    
+                    extension Model {
+                        init(from decoder: Decoder) throws {
+                            let container = try decoder.singleValueContainer()
+                            switch try? container.decode(String.self) {
+                            case "vd":
+                                self = .vod
+                                return
+                            default:
+                                break
+                            }
+                            let rawCase = try container.decode(String.self)
+                            if rawCase == "bla" {
+                                self = .bla
+                                return
+                            }
+                            throw DecodingError.typeMismatch(Model.self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: "No matching decoding cases Model", underlyingError: nil))
+                        }
+                    }
+                    
+                    extension Model {
+                        func encode(to encoder: Encoder) throws {
+                            var container = encoder.singleValueContainer()
+                            switch self {
+                            case .vod:
+                                try container.encode("vd")
+                            case .bla:
+                                try container.encode("bla")
+                            }
+                        }
+                    }
+                    """,
+                    macros: testMacros
+        )
+#else
+        throw XCTSkip("macros are only supported when running tests for the host platform")
+#endif
+    }
+
+    func testSafeDecodingOfEnumForNaturalStrategyWithRawValueTypeWithReporting() throws {
+
+    #if canImport(SafeDecodingMacros)
+            assertMacroExpansion(
+                    """
+                    @EnumSafeDecoding(decodingStrategy: .natural, shouldImplementEncoding: true, reporter: reporter)
+                    enum Model: Int {
+                        @CaseNameDecoding("vd")
+                        @FallbackCaseDecoding
+                        case vod
+                        case bla
+                    }
+                    """,
+                    expandedSource:
+                    """
+
+                    enum Model: Int {
+                        case vod
+                        case bla
+                    }
+
+                    extension Model {
+                        init(from decoder: Decoder) throws {
+                            do {
+                                let container = try decoder.singleValueContainer()
+                                if let `case` = Self.init(rawValue: try container.decode(Int .self)) {
+                                    self = `case`
+                                    return
+                                } else {
+                                    throw DecodingError.typeMismatch(Model.self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: "Invalid number of keys found, expected one.", underlyingError: nil))
+                                }
+                            } catch {
+                                self = .vod
+                                (reporter).report(error: error, in: Model.self)
                             }
                         }
                     }
@@ -737,15 +854,16 @@ extension EnumSafeDecodingMacrosTests {
     #endif
     }
 
-    func testSafeDecodingOfEnumForNaturalStrategyWithoutRawValueType() throws {
+    func testSafeDecodingOfEnumForNaturalStrategyWithoutRawValueTypeWithReporting() throws {
 
     #if canImport(SafeDecodingMacros)
             assertMacroExpansion(
                     """
-                    @EnumSafeDecoding(decodingStrategy: .natural, shouldImplementEncoding: true)
+                    @EnumSafeDecoding(decodingStrategy: .natural, shouldImplementEncoding: true, reporter: reporter)
                     enum Model {
                         @CaseNameDecoding("vd")
                         case vod
+                        @FallbackCaseDecoding
                         case bla
                     }
                     """,
@@ -759,20 +877,18 @@ extension EnumSafeDecodingMacrosTests {
 
                     extension Model {
                         init(from decoder: Decoder) throws {
-                            let container = try decoder.singleValueContainer()
-                            switch try? container.decode(String.self) {
-                            case "vd":
-                                self = .vod
-                                return
-                            default:
-                                break
-                            }
-                            let rawCase = try container.decode(String.self)
-                            if rawCase == "bla" {
+                            do {
+                                let container = try decoder.singleValueContainer()
+                                let rawCase = try container.decode(String.self)
+                                if rawCase == "bla" {
+                                    self = .bla
+                                    return
+                                }
+                                throw DecodingError.typeMismatch(Model.self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: "No matching decoding cases Model", underlyingError: nil))
+                            } catch {
                                 self = .bla
-                                return
+                                (reporter).report(error: error, in: Model.self)
                             }
-                            throw DecodingError.typeMismatch(Model.self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: "No matching decoding cases Model", underlyingError: nil))
                         }
                     }
 

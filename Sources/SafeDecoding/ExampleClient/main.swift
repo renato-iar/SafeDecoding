@@ -41,6 +41,13 @@ class SafeDecodingErrorReporter: SafeDecodingReporter {
         print("===> decoding error: {\(containerType).\(propertyName)[\(key)]: \(itemType)}: \(error.localizedDescription)")
     }
 
+    func report<Container>(
+        error: any Error,
+        in containerType: Container.Type
+    ) {
+        print("===> decoding error: {\(containerType)}: \(error.localizedDescription)")
+    }
+
     static let shared = SafeDecodingErrorReporter()
 }
 
@@ -218,6 +225,7 @@ enum MediaAssetKeyed: Codable {
     @CaseNameDecoding("ASSET/EPISODE")
     case episode(id: String, title: String, arguments: [String: Double])
     @CaseNameDecoding("ASSET/PLACEHOLDER")
+    @FallbackCaseDecoding
     case placeholder
 }
 
@@ -244,16 +252,19 @@ testEncoding(input: MediaAssetKeyed.placeholder)
 )
 enum Chirality1: Int, Codable {
     @CaseNameDecoding("ch-left")
+    @FallbackCaseDecoding
     case left
     case right
 }
 
 @SafeDecoding(
     decodingStrategy: .natural,
-    shouldImplementEncoding: true
+    shouldImplementEncoding: true,
+    reporter: SafeDecodingErrorReporter.shared
 )
 enum Chirality2: Codable {
     @CaseNameDecoding("ch-left")
+    @FallbackCaseDecoding
     case left
     case right
     case neutral
