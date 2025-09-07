@@ -571,27 +571,28 @@ private extension EnumSafeDecodingMacro {
 
             items.append("let container = try decoder.singleValueContainer()")
 
-            if
-                !overridenCaseNames.isEmpty,
-                let switchStatement = CodeBlockItemSyntax(
-                    try SwitchExprSyntax("switch try? container.decode(String.self)") {
-                        for (caseName, overrideCaseName) in overridenCaseNames {
-                            SwitchCaseSyntax("case \"\(raw: overrideCaseName)\":") {
-                                CodeBlockItemListSyntax {
-                                    CodeBlockItemSyntax("self = .\(raw: caseName)")
-                                    CodeBlockItemSyntax("return")
-                                }
-                            }
-                        }
-
-                        SwitchCaseSyntax("default:") {
-                            CodeBlockItemSyntax("break")
-                        }
-                    }
-                )
-            {
+            if !overridenCaseNames.isEmpty {
                 items.append(
-                    switchStatement
+                    CodeBlockItemSyntax(
+                        item: .expr(
+                            ExprSyntax(
+                                try SwitchExprSyntax("switch try? container.decode(String.self)") {
+                                    for (caseName, overrideCaseName) in overridenCaseNames {
+                                        SwitchCaseSyntax("case \"\(raw: overrideCaseName)\":") {
+                                            CodeBlockItemListSyntax {
+                                                CodeBlockItemSyntax("self = .\(raw: caseName)")
+                                                CodeBlockItemSyntax("return")
+                                            }
+                                        }
+                                    }
+
+                                    SwitchCaseSyntax("default:") {
+                                        CodeBlockItemSyntax("break")
+                                    }
+                                }
+                            )
+                            )
+                    )
                 )
             }
 

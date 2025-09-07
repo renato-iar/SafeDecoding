@@ -758,26 +758,30 @@ extension EnumSafeDecodingMacrosTests {
                         case vod
                         case bla
                     }
-                    
+
                     extension Model {
                         init(from decoder: Decoder) throws {
-                            let container = try decoder.singleValueContainer()
-                            switch try? container.decode(String.self) {
-                            case "vd":
-                                self = .vod
-                                return
-                            default:
-                                break
-                            }
-                            let rawCase = try container.decode(String.self)
-                            if rawCase == "bla" {
+                            do {
+                                let container = try decoder.singleValueContainer()
+                                switch try? container.decode(String.self) {
+                                case "vd":
+                                    self = .vod
+                                    return
+                                default:
+                                    break
+                                }
+                                let rawCase = try container.decode(String.self)
+                                if rawCase == "bla" {
+                                    self = .bla
+                                    return
+                                }
+                                throw DecodingError.typeMismatch(Model.self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: "No matching decoding cases Model", underlyingError: nil))
+                            } catch {
                                 self = .bla
-                                return
                             }
-                            throw DecodingError.typeMismatch(Model.self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: "No matching decoding cases Model", underlyingError: nil))
                         }
                     }
-                    
+
                     extension Model {
                         func encode(to encoder: Encoder) throws {
                             var container = encoder.singleValueContainer()
@@ -822,6 +826,13 @@ extension EnumSafeDecodingMacrosTests {
                         init(from decoder: Decoder) throws {
                             do {
                                 let container = try decoder.singleValueContainer()
+                                switch try? container.decode(String.self) {
+                                case "vd":
+                                    self = .vod
+                                    return
+                                default:
+                                    break
+                                }
                                 if let `case` = Self.init(rawValue: try container.decode(Int .self)) {
                                     self = `case`
                                     return
@@ -879,6 +890,13 @@ extension EnumSafeDecodingMacrosTests {
                         init(from decoder: Decoder) throws {
                             do {
                                 let container = try decoder.singleValueContainer()
+                                switch try? container.decode(String.self) {
+                                case "vd":
+                                    self = .vod
+                                    return
+                                default:
+                                    break
+                                }
                                 let rawCase = try container.decode(String.self)
                                 if rawCase == "bla" {
                                     self = .bla
