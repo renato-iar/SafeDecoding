@@ -699,7 +699,7 @@ extension EnumSafeDecodingMacrosTests {
                         case vod
                         case bla
                     }
-                    
+
                     extension Model {
                         init(from decoder: Decoder) throws {
                             let container = try decoder.singleValueContainer()
@@ -714,11 +714,11 @@ extension EnumSafeDecodingMacrosTests {
                                 self = `case`
                                 return
                             } else {
-                                throw DecodingError.typeMismatch(Model.self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: "Invalid number of keys found, expected one.", underlyingError: nil))
+                                throw DecodingError.typeMismatch(Model.self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: "No matching decoding cases.", underlyingError: nil))
                             }
                         }
                     }
-                    
+
                     extension Model {
                         func encode(to encoder: Encoder) throws {
                             var container = encoder.singleValueContainer()
@@ -837,7 +837,7 @@ extension EnumSafeDecodingMacrosTests {
                                     self = `case`
                                     return
                                 } else {
-                                    throw DecodingError.typeMismatch(Model.self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: "Invalid number of keys found, expected one.", underlyingError: nil))
+                                    throw DecodingError.typeMismatch(Model.self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: "No matching decoding cases.", underlyingError: nil))
                                 }
                             } catch {
                                 self = .vod
