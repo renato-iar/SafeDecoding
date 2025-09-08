@@ -604,7 +604,7 @@ private extension EnumSafeDecodingMacro {
                             self = `case`
                             return
                         } else {
-                            throw DecodingError.typeMismatch(\(type).self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: "Invalid number of keys found, expected one.", underlyingError: nil))
+                            throw DecodingError.typeMismatch(\(type).self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: "No matching decoding cases.", underlyingError: nil))
                         }
                         """
                     )
@@ -664,72 +664,6 @@ private extension EnumSafeDecodingMacro {
             } else {
                 try decoderBlock()
             }
-            /*
-            CodeBlockItemListSyntax(
-                [
-                    CodeBlockItemSyntax(
-                        "let container = try decoder.singleValueContainer()"
-                    )
-                ]
-            )
-
-            if !overridenCaseNames.isEmpty {
-                try SwitchExprSyntax("switch try? container.decode(String.self)") {
-                    for (caseName, overrideCaseName) in overridenCaseNames {
-                        SwitchCaseSyntax("case \"\(raw: overrideCaseName)\":") {
-                            CodeBlockItemListSyntax {
-                                CodeBlockItemSyntax("self = .\(raw: caseName)")
-                                CodeBlockItemSyntax("return")
-                            }
-                        }
-                    }
-
-                    SwitchCaseSyntax("default:") {
-                        CodeBlockItemSyntax("break")
-                    }
-                }
-            }
-
-            if !nonOverridenCaseNames.isEmpty {
-                if let rawValueType {
-                    CodeBlockItemSyntax(
-                        """
-                        if let `case` = Self.init(rawValue: try container.decode(\(rawValueType).self)) {
-                            self = `case`
-                            return
-                        } else {
-                            throw DecodingError.typeMismatch(\(type).self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: "Invalid number of keys found, expected one.", underlyingError: nil))
-                        }
-                        """
-                    )
-                } else {
-                    CodeBlockItemSyntax(
-                        """
-                        let rawCase = try container.decode(String.self)
-                        """
-                    )
-
-                    for caseName in nonOverridenCaseNames {
-                        CodeBlockItemSyntax(
-                            """
-                            if rawCase == \"\(raw: caseName)\" {
-                                self = .\(raw: caseName)
-                                return
-                            }
-                            """
-                        )
-                    }
-
-                    CodeBlockItemSyntax(
-                        "throw DecodingError.typeMismatch(\(type).self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: \"No matching decoding cases \(type)\", underlyingError: nil))"
-                    )
-                }
-            } else {
-                CodeBlockItemSyntax(
-                    "throw DecodingError.typeMismatch(\(type).self, DecodingError.Context.init(codingPath: container.codingPath, debugDescription: \"No matching decoding cases \(type)\", underlyingError: nil))"
-                )
-            }
-            */
         }
 
         let `extension` = try ExtensionDeclSyntax(
